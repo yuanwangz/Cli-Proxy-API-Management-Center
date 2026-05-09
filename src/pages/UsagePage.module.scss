@@ -12,8 +12,8 @@
 
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  width: min(100%, 1660px);
+  gap: 10px;
+  width: min(100%, 1780px);
   margin: 0 auto;
   color: var(--usage-ink);
 }
@@ -22,18 +22,18 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 
   h1 {
     margin: 0;
-    font-size: clamp(25px, 2.5vw, 34px);
+    font-size: clamp(24px, 2.2vw, 31px);
     font-weight: 820;
     line-height: 1.06;
     letter-spacing: 0;
   }
 
   p {
-    margin: 6px 0 0;
+    margin: 4px 0 0;
     color: var(--usage-muted);
     font-size: 14px;
     line-height: 1.6;
@@ -94,10 +94,10 @@
 
 .filterRail {
   display: grid;
-  grid-template-columns: minmax(240px, 1.25fr) repeat(4, minmax(130px, 1fr)) auto;
-  gap: 8px;
+  grid-template-columns: minmax(300px, 1.35fr) repeat(4, minmax(128px, 1fr)) auto;
+  gap: 7px;
   align-items: center;
-  padding: 8px;
+  padding: 7px;
   border: 1px solid var(--usage-border);
   border-radius: 10px;
   background: var(--usage-card-strong);
@@ -118,7 +118,7 @@
     min-width: 0;
     border: 0;
     border-radius: 6px;
-    padding: 7px 9px;
+    padding: 6px 8px;
     background: transparent;
     color: var(--usage-muted);
     font-size: 13px;
@@ -165,14 +165,13 @@
 .metricGrid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 9px;
+  gap: 8px;
 }
 
 .metricCard,
 .chartPanel,
 .sidePanel,
-.recentPanel,
-.donutPanel {
+.recentPanel {
   border: 1px solid var(--usage-border);
   border-radius: 10px;
   background:
@@ -185,21 +184,21 @@
 
 .metricCard {
   position: relative;
-  min-height: 84px;
-  padding: 12px;
+  min-height: 74px;
+  padding: 10px;
   overflow: hidden;
 
   strong {
     display: block;
-    margin-top: 9px;
-    font-size: clamp(20px, 1.7vw, 27px);
+    margin-top: 7px;
+    font-size: clamp(19px, 1.45vw, 25px);
     line-height: 1;
     letter-spacing: 0;
   }
 
   small {
     display: block;
-    margin-top: 7px;
+    margin-top: 6px;
     color: var(--usage-muted);
     font-size: 12px;
     white-space: nowrap;
@@ -245,8 +244,8 @@
 
 .mainGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1.42fr) minmax(430px, 0.9fr);
+  gap: 10px;
   align-items: start;
 }
 
@@ -254,21 +253,21 @@
 .sideColumn {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .sidePair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
 .chartPair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -276,14 +275,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  padding: 12px 13px 0;
+  padding: 9px 11px 0;
 
   h2 {
     margin: 0;
     color: var(--usage-ink);
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 820;
     letter-spacing: 0;
   }
@@ -299,7 +298,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 9px;
+  gap: 7px;
   color: var(--usage-muted);
   font-size: 12px;
 }
@@ -318,7 +317,7 @@
 
 .chartSurface {
   overflow-x: auto;
-  padding: 0 10px 10px;
+  padding: 0 8px 8px;
 
   svg {
     display: block;
@@ -348,14 +347,14 @@
 .barChart {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 12px 13px 13px;
+  gap: 5px;
+  padding: 8px 11px 10px;
 }
 
 .barRow {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) minmax(150px, 2fr) 56px;
-  gap: 10px;
+  grid-template-columns: minmax(120px, 1fr) minmax(120px, 1.8fr) 48px;
+  gap: 8px;
   align-items: center;
   color: var(--usage-muted);
   font-size: 12px;
@@ -375,7 +374,7 @@
 }
 
 .barTrack {
-  height: 12px;
+  height: 9px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-tertiary) 74%, transparent);
   overflow: hidden;
@@ -388,20 +387,20 @@
 }
 
 .sidePanel {
-  padding-bottom: 11px;
+  padding-bottom: 8px;
 }
 
 .ledgerTable,
 .compactRows,
 .warningRows {
-  padding: 9px 13px 0;
+  padding: 7px 11px 0;
 }
 
 .ledgerHead,
 .ledgerRow {
   display: grid;
   grid-template-columns: minmax(116px, 1fr) 70px 66px 58px;
-  gap: 8px;
+  gap: 7px;
   align-items: center;
 }
 
@@ -409,12 +408,12 @@
   color: var(--text-tertiary);
   font-size: 11px;
   font-weight: 750;
-  padding-bottom: 8px;
+  padding-bottom: 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
 }
 
 .ledgerGroup {
-  padding: 6px 0 2px;
+  padding: 5px 0 1px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 52%, transparent);
 
   &:last-child {
@@ -426,7 +425,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   font-size: 13px;
   font-weight: 820;
 }
@@ -527,13 +526,13 @@
 .compactRows {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
 }
 
 .compactRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 64px 58px;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   font-size: 12px;
 
@@ -554,20 +553,20 @@
 .warningRows {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 6px;
 }
 
 .apiKeyRows {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 9px 13px 0;
+  gap: 5px;
+  padding: 7px 11px 0;
 }
 
 .apiKeyRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 54px 60px;
-  gap: 8px;
+  gap: 7px;
   align-items: center;
   font-size: 12px;
 
@@ -603,7 +602,7 @@
 .warningRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 94px 52px;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
   font-size: 12px;
 
@@ -629,7 +628,7 @@
 }
 
 .warningMeter {
-  height: 8px;
+  height: 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-tertiary) 80%, transparent);
   overflow: hidden;
@@ -642,8 +641,180 @@
   }
 }
 
+.coolingPanelBody,
+.costEstimateBody,
+.breakdownRows {
+  padding: 7px 11px 0;
+}
+
+.coolingNumbers {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+
+  strong {
+    color: var(--usage-warning);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  span {
+    color: var(--usage-muted);
+    font-size: 13px;
+    font-weight: 760;
+  }
+}
+
+.coolingMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--usage-muted);
+  font-size: 12px;
+}
+
+.coolingTrack,
+.breakdownTrack {
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
+  overflow: hidden;
+
+  span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #dcb862, var(--usage-warning));
+  }
+}
+
+.coolingTrack {
+  margin-top: 7px;
+}
+
+.coolingList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+
+  div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    color: var(--usage-muted);
+    font-size: 12px;
+  }
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--usage-ink);
+    font-weight: 720;
+  }
+
+  em {
+    color: var(--usage-warning);
+    font-style: normal;
+    font-weight: 760;
+  }
+}
+
+.costEstimateTotal {
+  display: grid;
+  gap: 3px;
+
+  strong {
+    color: var(--usage-warning);
+    font-size: 24px;
+    line-height: 1;
+  }
+
+  span {
+    color: var(--usage-muted);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+}
+
+.costRows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.costRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 8px;
+  align-items: center;
+  font-size: 12px;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--usage-ink);
+    font-weight: 720;
+  }
+
+  strong {
+    color: var(--usage-warning);
+    text-align: right;
+  }
+
+  em {
+    grid-column: 1 / -1;
+    color: var(--text-tertiary);
+    font-style: normal;
+    font-size: 11px;
+  }
+}
+
+.breakdownRows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.breakdownRow {
+  display: grid;
+  gap: 5px;
+
+  > div:first-child {
+    display: grid;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
+    gap: 7px;
+    align-items: center;
+    color: var(--usage-muted);
+    font-size: 12px;
+  }
+
+  span:first-child {
+    width: 9px;
+    height: 9px;
+    border-radius: 3px;
+  }
+
+  em {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-style: normal;
+  }
+
+  strong {
+    color: var(--usage-ink);
+  }
+}
+
 .recentPanel {
-  padding-bottom: 8px;
+  padding-bottom: 6px;
 }
 
 .tableToolbar,
@@ -651,8 +822,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px 0;
+  gap: 8px;
+  padding: 7px 10px 0;
   color: var(--usage-muted);
   font-size: 12px;
 }
@@ -666,7 +837,7 @@
   button {
     border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
     border-radius: 6px;
-    padding: 5px 8px;
+    padding: 4px 7px;
     background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
     color: var(--usage-muted);
     font-size: 12px;
@@ -694,7 +865,7 @@
 
 .tableScroller {
   overflow-x: auto;
-  padding: 7px 10px 0;
+  padding: 6px 8px 0;
 }
 
 .usageTable {
@@ -705,7 +876,7 @@
 
   th,
   td {
-    padding: 7px 8px;
+    padding: 6px 7px;
     border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
     text-align: left;
     white-space: nowrap;
@@ -732,7 +903,7 @@
   min-width: 42px;
   justify-content: center;
   border-radius: 6px;
-  padding: 3px 7px;
+  padding: 2px 7px;
   font-size: 11px;
   font-weight: 820;
 }
@@ -747,102 +918,36 @@
   background: rgba(198, 87, 70, 0.16);
 }
 
-.donutPanel {
-  padding-bottom: 12px;
-}
-
-.donutBody {
-  display: grid;
-  grid-template-columns: 116px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 12px 13px 13px;
-}
-
-.donut {
-  position: relative;
-  width: 108px;
-  height: 108px;
-  border-radius: 50%;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-color) 55%, transparent);
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 25px;
-    border-radius: 50%;
-    background: var(--bg-primary);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 45%, transparent);
-  }
-
-  span {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    padding: 31px;
-    text-align: center;
-    color: var(--usage-ink);
-    font-size: 13px;
-    font-weight: 820;
-  }
-}
-
-.donutLegend {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  min-width: 0;
-
-  div {
-    display: grid;
-    grid-template-columns: 10px minmax(0, 1fr) auto;
-    gap: 8px;
-    align-items: center;
-    color: var(--usage-muted);
-    font-size: 12px;
-  }
-
-  span {
-    width: 9px;
-    height: 9px;
-    border-radius: 3px;
-  }
-
-  em {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-style: normal;
-  }
-
-  strong {
-    color: var(--usage-ink);
-  }
-}
-
 .loadingState,
 .emptyInline {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 140px;
+  min-height: 120px;
   color: var(--usage-muted);
   font-size: 14px;
 }
 
 .emptyInline {
-  min-height: 74px;
+  min-height: 42px;
   width: 100%;
+}
+
+.sidePanel .emptyInline,
+.chartPanel .emptyInline {
+  justify-content: flex-start;
+  min-height: 36px;
+  font-size: 12px;
 }
 
 @media (max-width: 1280px) {
   .metricGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
 
+@media (max-width: 1120px) {
   .mainGrid {
     grid-template-columns: 1fr;
   }
@@ -894,13 +999,5 @@
   .metricGrid,
   .filterRail {
     grid-template-columns: 1fr;
-  }
-
-  .donutBody {
-    grid-template-columns: 1fr;
-  }
-
-  .donut {
-    margin: 0 auto;
   }
 }

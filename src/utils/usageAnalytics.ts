@@ -160,6 +160,12 @@ const MODEL_PRICES: Array<{ pattern: RegExp; input: number; output: number }> = 
 
 const FALLBACK_PRICE = { input: 0.5, output: 1.5 };
 
+export interface ModelPriceEstimate {
+  input: number;
+  output: number;
+  source: 'matched' | 'fallback';
+}
+
 const toFiniteNumber = (value: unknown): number => {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -222,11 +228,16 @@ export const inferProvider = (model: string, account: string, endpoint = ''): st
   return 'Other';
 };
 
-const priceForModel = (model: string) =>
-  MODEL_PRICES.find((price) => price.pattern.test(model)) ?? FALLBACK_PRICE;
+export const getModelPriceEstimate = (model: string): ModelPriceEstimate => {
+  const matched = MODEL_PRICES.find((price) => price.pattern.test(model));
+  if (matched) {
+    return { input: matched.input, output: matched.output, source: 'matched' };
+  }
+  return { ...FALLBACK_PRICE, source: 'fallback' };
+};
 
 const estimateCost = (model: string, inputTokens: number, outputTokens: number): number => {
-  const price = priceForModel(model);
+  const price = getModelPriceEstimate(model);
   return (inputTokens / 1_000_000) * price.input + (outputTokens / 1_000_000) * price.output;
 };
 
@@ -627,5 +638,10 @@ export const formatLatency = (value: number | null): string => {
   return `${Math.round(value)} ms`;
 };
 
-export const formatCurrency = (value: number): string =>
-  `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const formatCurrency = (value: number): string => {
+  const fractionDigits = Math.abs(value) > 0 && Math.abs(value) < 0.01 ? 4 : 2;
+  return `$${value.toLocaleString(undefined, {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  })}`;
+};

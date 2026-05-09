@@ -10,8 +10,9 @@ import {
   IconUpload,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { usageApi } from '@/services/api';
+import { authFilesApi, usageApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
+import type { AuthFileItem } from '@/types/authFile';
 import type { UsagePayload, UsageTimeRange } from '@/types/usage';
 import { downloadBlob } from '@/utils/download';
 import {
@@ -21,6 +22,7 @@ import {
   formatCurrency,
   formatLatency,
   formatPercent,
+  getModelPriceEstimate,
   type GroupRow,
   type TimeBucket,
 } from '@/utils/usageAnalytics';
@@ -52,11 +54,100 @@ const DEFAULT_FILTERS: UsageFilters = {
 };
 
 const chartWidth = 760;
-const chartHeight = 158;
-const chartPadding = { top: 16, right: 14, bottom: 24, left: 40 };
+const chartHeight = 132;
+const chartPadding = { top: 12, right: 12, bottom: 22, left: 38 };
 const RECENT_PAGE_SIZES = [25, 50, 100];
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+type CredentialCoolingRow = {
+  name: string;
+  provider: string;
+  message: string;
+  nextRetryAt: number;
+};
+
+type CredentialHealthSummary = {
+  total: number;
+  cooling: number;
+  disabled: number;
+  available: number;
+  rows: CredentialCoolingRow[];
+  error: string;
+};
+
+const EMPTY_CREDENTIAL_SUMMARY: CredentialHealthSummary = {
+  total: 0,
+  cooling: 0,
+  disabled: 0,
+  available: 0,
+  rows: [],
+  error: '',
+};
+
+const QUOTA_COOLDOWN_PATTERN =
+  /(quota|exhaust|capacity|limit|rate|429|too many|credit|配额|额度|限流|冷却|资源耗尽|用量)/i;
+
+const readText = (value: unknown): string => {
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '';
+};
+
+const parseTimeMs = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 1e12 ? value * 1000 : value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    const asNumber = Number(trimmed);
+    if (Number.isFinite(asNumber)) return asNumber < 1e12 ? asNumber * 1000 : asNumber;
+    const parsed = Date.parse(trimmed);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
+const isDisabledCredential = (file: AuthFileItem): boolean => {
+  const raw = file.disabled as unknown;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
+  return false;
+};
+
+const buildCredentialHealthSummary = (
+  files: AuthFileItem[],
+  nowMs = Date.now()
+): CredentialHealthSummary => {
+  const rows = files
+    .map((file) => {
+      const nextRetryAt = parseTimeMs(file['next_retry_after'] ?? file.nextRetryAfter);
+      const message = readText(file['status_message'] ?? file.statusMessage);
+      return {
+        name: readText(file.name) || readText(file.id) || '未命名凭证',
+        provider: readText(file.provider ?? file.type) || 'unknown',
+        message,
+        nextRetryAt,
+      };
+    })
+    .filter((row) => row.nextRetryAt > nowMs && QUOTA_COOLDOWN_PATTERN.test(row.message))
+    .sort((a, b) => a.nextRetryAt - b.nextRetryAt);
+
+  const disabled = files.filter(isDisabledCredential).length;
+  const cooling = rows.length;
+  const total = files.length;
+
+  return {
+    total,
+    cooling,
+    disabled,
+    available: Math.max(0, total - cooling - disabled),
+    rows,
+    error: '',
+  };
+};
 
 const maxOfSeries = (series: Series[]) => {
   const max = Math.max(0, ...series.flatMap((item) => item.values));
@@ -422,51 +513,109 @@ function QuotaWarnings({ rows }: { rows: GroupRow[] }) {
   );
 }
 
-function DonutPanel({
-  title,
-  center,
-  items,
-}: {
-  title: string;
-  center: string;
-  items: Array<{ label: string; value: number; color: string }>;
-}) {
-  const total = Math.max(1, sum(items.map((item) => item.value)));
-  const gradient = items
-    .reduce<{ parts: string[]; cursor: number }>(
-      (acc, item) => {
-        const start = acc.cursor;
-        const end = start + (item.value / total) * 100;
-        return {
-          cursor: end,
-          parts: [...acc.parts, `${item.color} ${start}% ${end}%`],
-        };
-      },
-      { parts: [], cursor: 0 }
-    )
-    .parts.join(', ');
-  const donutBackground = gradient
-    ? `conic-gradient(${gradient})`
-    : 'conic-gradient(color-mix(in srgb, var(--bg-tertiary) 78%, transparent) 0% 100%)';
+function CredentialCoolingPanel({ summary }: { summary: CredentialHealthSummary }) {
+  const coolingRate = summary.total > 0 ? (summary.cooling / summary.total) * 100 : 0;
 
   return (
-    <section className={styles.donutPanel}>
+    <section className={styles.sidePanel}>
       <div className={styles.panelHeader}>
-        <h2>{title}</h2>
+        <h2>凭证冷却</h2>
+        <span className={styles.panelHint}>额度冷却 / 总凭证</span>
       </div>
-      <div className={styles.donutBody}>
-        <div className={styles.donut} style={{ background: donutBackground }}>
-          <span>{center}</span>
+      <div className={styles.coolingPanelBody}>
+        <div className={styles.coolingNumbers}>
+          <strong>{summary.cooling}</strong>
+          <span>/ {summary.total.toLocaleString()}</span>
         </div>
-        <div className={styles.donutLegend}>
-          {items.map((item) => (
-            <div key={item.label}>
+        <div className={styles.coolingMeta}>
+          <span>可轮转 {summary.available.toLocaleString()}</span>
+          <span>停用 {summary.disabled.toLocaleString()}</span>
+        </div>
+        <div className={styles.coolingTrack}>
+          <span style={{ width: `${Math.min(100, Math.max(summary.cooling > 0 ? 8 : 0, coolingRate))}%` }} />
+        </div>
+        {summary.error ? (
+          <div className={styles.emptyInline}>{summary.error}</div>
+        ) : summary.rows.length > 0 ? (
+          <div className={styles.coolingList}>
+            {summary.rows.slice(0, 3).map((row) => (
+              <div key={`${row.name}-${row.nextRetryAt}`}>
+                <span title={row.name}>{row.name}</span>
+                <em>{new Date(row.nextRetryAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</em>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.emptyInline}>暂无额度冷却凭证</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function CostEstimatePanel({ rows, totalCost }: { rows: GroupRow[]; totalCost: number }) {
+  const topRows = rows.slice(0, 5);
+
+  return (
+    <section className={styles.sidePanel}>
+      <div className={styles.panelHeader}>
+        <h2>预估模型成本</h2>
+        <span className={styles.panelHint}>非真实账单</span>
+      </div>
+      <div className={styles.costEstimateBody}>
+        <div className={styles.costEstimateTotal}>
+          <strong>{formatCurrency(totalCost)}</strong>
+          <span>输入/输出 Token × 内置 $/1M 单价</span>
+        </div>
+        <div className={styles.costRows}>
+          {topRows.map((row) => {
+            const price = getModelPriceEstimate(row.label);
+            const sourceLabel = price.source === 'fallback' ? '默认价' : '匹配价';
+            return (
+              <div key={row.key} className={styles.costRow}>
+                <span title={row.label}>{row.label}</span>
+                <strong>{formatCurrency(row.cost)}</strong>
+                <em>
+                  {sourceLabel} ${price.input}/{price.output}
+                </em>
+              </div>
+            );
+          })}
+          {topRows.length === 0 && <div className={styles.emptyInline}>暂无模型成本估算</div>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TokenBreakdownPanel({
+  total,
+  items,
+}: {
+  total: number;
+  items: Array<{ label: string; value: number; color: string }>;
+}) {
+  const denominator = Math.max(1, sum(items.map((item) => item.value)));
+
+  return (
+    <section className={styles.sidePanel}>
+      <div className={styles.panelHeader}>
+        <h2>Token 构成</h2>
+        <span className={styles.panelHint}>{formatCompactNumber(total)} 总量</span>
+      </div>
+      <div className={styles.breakdownRows}>
+        {items.map((item) => (
+          <div key={item.label} className={styles.breakdownRow}>
+            <div>
               <span style={{ background: item.color }} />
               <em>{item.label}</em>
               <strong>{formatCompactNumber(item.value)}</strong>
             </div>
-          ))}
-        </div>
+            <div className={styles.breakdownTrack}>
+              <span style={{ width: `${Math.max(4, (item.value / denominator) * 100)}%`, background: item.color }} />
+            </div>
+          </div>
+        ))}
       </div>
     </section>
   );
@@ -601,6 +750,9 @@ export function UsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [statisticsEnabled, setStatisticsEnabled] = useState<boolean | null>(null);
   const [filters, setFilters] = useState<UsageFilters>(DEFAULT_FILTERS);
+  const [credentialSummary, setCredentialSummary] = useState<CredentialHealthSummary>(
+    EMPTY_CREDENTIAL_SUMMARY
+  );
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -608,12 +760,24 @@ export function UsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const [usageData, enabled] = await Promise.all([
+      const [usageData, enabled, authFilesResult] = await Promise.all([
         usageApi.getUsage(),
         usageApi.getStatisticsEnabled().catch(() => null),
+        authFilesApi
+          .list()
+          .then((data) => ({ data, error: '' }))
+          .catch((err) => ({
+            data: null,
+            error: err instanceof Error ? err.message : '凭证列表读取失败',
+          })),
       ]);
       setPayload(usageData);
       setStatisticsEnabled(enabled);
+      setCredentialSummary(
+        authFilesResult.data
+          ? buildCredentialHealthSummary(authFilesResult.data.files ?? [])
+          : { ...EMPTY_CREDENTIAL_SUMMARY, error: authFilesResult.error || '凭证列表读取失败' }
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : '加载使用统计失败';
       setError(message);
@@ -880,14 +1044,18 @@ export function UsagePage() {
         <MetricCard
           label="预估成本"
           value={formatCurrency(summary.estimatedCost)}
-          detail="按内置模型价格估算"
+          detail="估算值，非真实账单"
           tone="warning"
         />
         <MetricCard
-          label="失败率"
-          value={formatPercent(summary.failureRate)}
-          detail={`${summary.failureCount.toLocaleString()} 次失败`}
-          tone={summary.failureRate > 5 ? 'danger' : 'neutral'}
+          label="凭证冷却"
+          value={`${credentialSummary.cooling}/${credentialSummary.total}`}
+          detail={
+            credentialSummary.error
+              ? credentialSummary.error
+              : `${credentialSummary.available.toLocaleString()} 可轮转 / ${credentialSummary.disabled.toLocaleString()} 停用`
+          }
+          tone={credentialSummary.cooling > 0 ? 'warning' : 'success'}
         />
       </section>
 
@@ -921,8 +1089,10 @@ export function UsagePage() {
                 </ChartFrame>
               </div>
               <FailureBarChart rows={analytics.endpointRows} />
+              <RecentRequestsTable rows={analytics.recentRows} />
             </div>
             <aside className={styles.sideColumn}>
+              <CredentialCoolingPanel summary={credentialSummary} />
               <HealthLedger rows={analytics.accountRows} />
               <div className={styles.sidePair}>
                 <Hotspots rows={analytics.endpointRows} />
@@ -930,21 +1100,11 @@ export function UsagePage() {
               </div>
               <div className={styles.sidePair}>
                 <QuotaWarnings rows={analytics.accountRows} />
-                <DonutPanel
-                  title="模型成本"
-                  center={formatCurrency(summary.estimatedCost)}
-                  items={topCostRows.map((row, index) => ({
-                    label: row.label,
-                    value: row.cost,
-                    color: ['#7ca982', '#bfa36d', '#8a8174', '#c65746', '#d7c7a1'][index] ?? '#8a8174',
-                  }))}
-                />
+                <CostEstimatePanel rows={topCostRows} totalCost={summary.estimatedCost} />
               </div>
-              <DonutPanel title="Token 构成" center={formatCompactNumber(summary.totalTokens)} items={tokenBreakdown} />
+              <TokenBreakdownPanel total={summary.totalTokens} items={tokenBreakdown} />
             </aside>
           </div>
-
-          <RecentRequestsTable rows={analytics.recentRows} />
         </>
       )}
     </div>
