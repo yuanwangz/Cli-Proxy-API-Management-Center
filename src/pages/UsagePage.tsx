@@ -478,41 +478,6 @@ function Hotspots({ rows }: { rows: GroupRow[] }) {
   );
 }
 
-function QuotaWarnings({ rows }: { rows: GroupRow[] }) {
-  const warnings = rows
-    .filter((row) => row.requests > 0)
-    .sort((a, b) => b.failureRate - a.failureRate || b.requests - a.requests)
-    .slice(0, 4);
-
-  return (
-    <section className={styles.sidePanel}>
-      <div className={styles.panelHeader}>
-        <h2>配额预警</h2>
-        <span className={styles.panelHint}>按失败率估算</span>
-      </div>
-      <div className={styles.warningRows}>
-        {warnings.map((row) => (
-          <div key={row.key} className={styles.warningRow}>
-            <div>
-              <CredentialChip
-                label={row.label}
-                fullLabel={row.fullLabel}
-                sourceHash={row.sourceHash}
-                apiKeyHash={row.apiKeyHash}
-              />
-              <span>{row.provider}</span>
-            </div>
-            <div className={styles.warningMeter}>
-              <span style={{ width: `${Math.min(100, Math.max(6, row.failureRate * 8))}%` }} />
-            </div>
-            <em>{formatPercent(row.failureRate)}</em>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function CredentialCoolingPanel({ summary }: { summary: CredentialHealthSummary }) {
   const coolingRate = summary.total > 0 ? (summary.cooling / summary.total) * 100 : 0;
 
@@ -1089,22 +1054,21 @@ export function UsagePage() {
                 </ChartFrame>
               </div>
               <FailureBarChart rows={analytics.endpointRows} />
-              <RecentRequestsTable rows={analytics.recentRows} />
+              <div className={styles.insightStack}>
+                <CostEstimatePanel rows={topCostRows} totalCost={summary.estimatedCost} />
+                <TokenBreakdownPanel total={summary.totalTokens} items={tokenBreakdown} />
+              </div>
             </div>
             <aside className={styles.sideColumn}>
               <CredentialCoolingPanel summary={credentialSummary} />
               <HealthLedger rows={analytics.accountRows} />
-              <div className={styles.sidePair}>
+              <div className={styles.insightStack}>
                 <Hotspots rows={analytics.endpointRows} />
                 <APIKeyUsagePanel rows={analytics.apiKeyRows} />
               </div>
-              <div className={styles.sidePair}>
-                <QuotaWarnings rows={analytics.accountRows} />
-                <CostEstimatePanel rows={topCostRows} totalCost={summary.estimatedCost} />
-              </div>
-              <TokenBreakdownPanel total={summary.totalTokens} items={tokenBreakdown} />
             </aside>
           </div>
+          <RecentRequestsTable rows={analytics.recentRows} />
         </>
       )}
     </div>
