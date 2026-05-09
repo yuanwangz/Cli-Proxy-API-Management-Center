@@ -8,6 +8,7 @@ export interface UsageEvent {
   model: string;
   provider: string;
   account: string;
+  authIndex: string;
   source: string;
   timestamp: string;
   timestampMs: number;
@@ -221,11 +222,12 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           0,
           toFiniteNumber(tokens.total_tokens) || inputTokens + outputTokens
         );
-        const account = safeText(detail.auth_index, safeText(detail.source, '未标记账号'));
-        const source = safeText(detail.source, account);
+        const source = safeText(detail.source, '');
+        const authIndex = safeText(detail.auth_index, '');
+        const account = source || authIndex || '未标记账号';
         const latencyValue = toFiniteNumber(detail.latency_ms);
         const latencyMs = latencyValue > 0 ? latencyValue : null;
-        const provider = inferProvider(modelName, account, endpointName);
+        const provider = inferProvider(modelName, `${account} ${authIndex}`, endpointName);
 
         events.push({
           id: `${endpointName}:${modelName}:${timestampMs}:${index}`,
@@ -235,6 +237,7 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           model: safeText(modelName, '-'),
           provider,
           account,
+          authIndex,
           source,
           timestamp: safeText(detail.timestamp, ''),
           timestampMs,
@@ -485,7 +488,7 @@ export const buildUsageAnalytics = (
       (event) => event.provider
     ),
     providerRows: buildGroupRows(filteredEvents, (event) => event.provider, (event) => event.provider, (event) => event.provider),
-    recentRows: filteredEvents.slice(0, 10).map((event) => ({
+    recentRows: filteredEvents.map((event) => ({
       id: event.id,
       time: event.timestampMs
         ? new Date(event.timestampMs).toLocaleString('zh-CN', {

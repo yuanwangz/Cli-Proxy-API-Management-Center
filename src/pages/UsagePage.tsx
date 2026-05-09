@@ -52,8 +52,9 @@ const DEFAULT_FILTERS: UsageFilters = {
 };
 
 const chartWidth = 760;
-const chartHeight = 178;
-const chartPadding = { top: 18, right: 16, bottom: 26, left: 44 };
+const chartHeight = 158;
+const chartPadding = { top: 16, right: 14, bottom: 24, left: 40 };
+const RECENT_PAGE_SIZES = [25, 50, 100];
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
@@ -241,11 +242,11 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
     <section className={styles.sidePanel}>
       <div className={styles.panelHeader}>
         <h2>健康账本</h2>
-        <span className={styles.panelHint}>提供商 / 账号</span>
+        <span className={styles.panelHint}>提供商 / 凭证</span>
       </div>
       <div className={styles.ledgerTable}>
         <div className={styles.ledgerHead}>
-          <span>账号</span>
+          <span>凭证</span>
           <span>请求数</span>
           <span>成功率</span>
           <span>P95</span>
@@ -268,7 +269,7 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
             ))}
           </div>
         ))}
-        {rows.length === 0 && <div className={styles.emptyInline}>暂无账号统计</div>}
+        {rows.length === 0 && <div className={styles.emptyInline}>暂无凭证统计</div>}
       </div>
     </section>
   );
@@ -381,11 +382,41 @@ function RecentRequestsTable({
 }: {
   rows: ReturnType<typeof buildUsageAnalytics>['recentRows'];
 }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(RECENT_PAGE_SIZES[0]);
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(rows.length, startIndex + pageSize);
+  const visibleRows = rows.slice(startIndex, endIndex);
+
+  const handlePageSizeChange = (nextPageSize: number) => {
+    setPageSize(nextPageSize);
+    setPage(1);
+  };
+
   return (
     <section className={styles.recentPanel}>
       <div className={styles.panelHeader}>
         <h2>最近请求</h2>
-        <span className={styles.panelHint}>最近 10 条</span>
+        <span className={styles.panelHint}>共 {rows.length.toLocaleString()} 条</span>
+      </div>
+      <div className={styles.tableToolbar}>
+        <span>
+          显示 {rows.length === 0 ? 0 : startIndex + 1}-{endIndex} 条
+        </span>
+        <div className={styles.pageSizeSwitch} aria-label="每页条数">
+          {RECENT_PAGE_SIZES.map((size) => (
+            <button
+              key={size}
+              type="button"
+              className={pageSize === size ? styles.activePageSize : ''}
+              onClick={() => handlePageSizeChange(size)}
+            >
+              {size}/页
+            </button>
+          ))}
+        </div>
       </div>
       <div className={styles.tableScroller}>
         <table className={styles.usageTable}>
@@ -396,7 +427,7 @@ function RecentRequestsTable({
               <th>提供商</th>
               <th>模型</th>
               <th>端点</th>
-              <th>账号</th>
+              <th>凭证账号</th>
               <th>输入</th>
               <th>输出</th>
               <th>总量</th>
@@ -405,7 +436,7 @@ function RecentRequestsTable({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr key={row.id}>
                 <td>{row.time}</td>
                 <td>
@@ -428,6 +459,31 @@ function RecentRequestsTable({
         </table>
         {rows.length === 0 && <div className={styles.emptyInline}>暂无请求明细</div>}
       </div>
+      {rows.length > 0 && (
+        <div className={styles.paginationBar}>
+          <span>
+            第 {currentPage} / {pageCount} 页
+          </span>
+          <div>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(1)}>
+              首页
+            </button>
+            <button type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>
+              上一页
+            </button>
+            <button
+              type="button"
+              disabled={currentPage >= pageCount}
+              onClick={() => setPage(currentPage + 1)}
+            >
+              下一页
+            </button>
+            <button type="button" disabled={currentPage >= pageCount} onClick={() => setPage(pageCount)}>
+              末页
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -589,7 +645,7 @@ export function UsagePage() {
             <h1>使用统计</h1>
             <span className={styles.liveBadge}>Live</span>
           </div>
-          <p>监控 API 用量、性能与可靠性，定位高成本模型、异常端点和账号健康状态。</p>
+          <p>监控 API 用量、性能与可靠性，定位高成本模型、异常端点和凭证健康状态。</p>
         </div>
         <div className={styles.headerActions}>
           <Button variant="secondary" size="sm" onClick={loadUsage} loading={loading}>
@@ -663,7 +719,7 @@ export function UsagePage() {
           value={filters.account}
           onChange={(value) => setFilter('account', value)}
           options={[
-            { value: 'all', label: '全部账号' },
+            { value: 'all', label: '全部凭证' },
             ...analytics.accountOptions.map((value) => ({ value, label: value })),
           ]}
         />
@@ -745,40 +801,40 @@ export function UsagePage() {
               >
                 <SeriesChart buckets={analytics.buckets} series={requestSeries} />
               </ChartFrame>
-              <ChartFrame
-                title="Token 趋势"
-                legend={<Legend items={tokenSeries.map((item) => ({ label: item.label, color: item.color }))} />}
-              >
-                <SeriesChart buckets={analytics.buckets} series={tokenSeries} />
-              </ChartFrame>
-              <ChartFrame
-                title="延迟分位"
-                legend={<Legend items={latencySeries.map((item) => ({ label: item.label, color: item.color }))} />}
-              >
-                <SeriesChart buckets={analytics.buckets} series={latencySeries} />
-              </ChartFrame>
+              <div className={styles.chartPair}>
+                <ChartFrame
+                  title="Token 趋势"
+                  legend={<Legend items={tokenSeries.map((item) => ({ label: item.label, color: item.color }))} />}
+                >
+                  <SeriesChart buckets={analytics.buckets} series={tokenSeries} />
+                </ChartFrame>
+                <ChartFrame
+                  title="延迟分位"
+                  legend={<Legend items={latencySeries.map((item) => ({ label: item.label, color: item.color }))} />}
+                >
+                  <SeriesChart buckets={analytics.buckets} series={latencySeries} />
+                </ChartFrame>
+              </div>
               <FailureBarChart rows={analytics.endpointRows} />
-              <RecentRequestsTable rows={analytics.recentRows} />
             </div>
             <aside className={styles.sideColumn}>
               <HealthLedger rows={analytics.accountRows} />
               <Hotspots rows={analytics.endpointRows} />
               <QuotaWarnings rows={analytics.accountRows} />
+              <DonutPanel
+                title="模型成本"
+                center={formatCurrency(summary.estimatedCost)}
+                items={topCostRows.map((row, index) => ({
+                  label: row.label,
+                  value: row.cost,
+                  color: ['#7ca982', '#bfa36d', '#8a8174', '#c65746', '#d7c7a1'][index] ?? '#8a8174',
+                }))}
+              />
+              <DonutPanel title="Token 构成" center={formatCompactNumber(summary.totalTokens)} items={tokenBreakdown} />
             </aside>
           </div>
 
-          <div className={styles.bottomGrid}>
-            <DonutPanel
-              title="模型成本"
-              center={formatCurrency(summary.estimatedCost)}
-              items={topCostRows.map((row, index) => ({
-                label: row.label,
-                value: row.cost,
-                color: ['#7ca982', '#bfa36d', '#8a8174', '#c65746', '#d7c7a1'][index] ?? '#8a8174',
-              }))}
-            />
-            <DonutPanel title="Token 构成" center={formatCompactNumber(summary.totalTokens)} items={tokenBreakdown} />
-          </div>
+          <RecentRequestsTable rows={analytics.recentRows} />
         </>
       )}
     </div>
