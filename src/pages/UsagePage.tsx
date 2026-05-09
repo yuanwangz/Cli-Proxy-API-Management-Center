@@ -291,35 +291,6 @@ function SeriesChart({ buckets, series }: { buckets: TimeBucket[]; series: Serie
   );
 }
 
-function FailureBarChart({ rows }: { rows: GroupRow[] }) {
-  const topRows = rows.filter((row) => row.failure > 0).slice(0, 8);
-  const maxFailure = Math.max(1, ...topRows.map((row) => row.failure));
-
-  return (
-    <section className={styles.chartPanel}>
-      <div className={styles.panelHeader}>
-        <h2>失败分布</h2>
-        <span className={styles.panelHint}>按端点聚合</span>
-      </div>
-      <div className={styles.barChart}>
-        {topRows.length === 0 ? (
-          <div className={styles.emptyInline}>当前筛选范围内没有失败请求</div>
-        ) : (
-          topRows.map((row) => (
-            <div key={row.key} className={styles.barRow}>
-              <span title={row.label}>{row.label}</span>
-              <div className={styles.barTrack}>
-                <div style={{ width: `${Math.max(5, (row.failure / maxFailure) * 100)}%` }} />
-              </div>
-              <strong>{row.failure.toLocaleString()}</strong>
-            </div>
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
 function MetricCard({
   label,
   value,
@@ -444,50 +415,56 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
 }
 
 function APIKeyUsagePanel({ rows }: { rows: GroupRow[] }) {
-  const topRows = rows.slice(0, 6);
-
   return (
     <section className={styles.sidePanel}>
       <div className={styles.panelHeader}>
         <h2>API Key 调用</h2>
-        <span className={styles.panelHint}>按调用方 Key</span>
+        <span className={styles.panelHint}>总数 / 成功 / 失败</span>
       </div>
-      <div className={styles.apiKeyRows}>
-        {topRows.map((row) => (
-          <div key={row.key} className={styles.apiKeyRow}>
-            <div>
-              <strong>{row.label}</strong>
-              <span>{formatCompactNumber(row.totalTokens)} Token</span>
-            </div>
-            <em>{row.requests.toLocaleString()}</em>
-            <span className={row.successRate >= 95 ? styles.good : styles.bad}>
-              {formatPercent(row.successRate)}
-            </span>
+      <div className={styles.distributionRows}>
+        <div className={styles.distributionHead}>
+          <span>API Key</span>
+          <span>总数</span>
+          <span>成功</span>
+          <span>失败</span>
+        </div>
+        {rows.map((row) => (
+          <div key={row.key} className={styles.distributionRow}>
+            <span title={row.fullLabel || row.label}>{row.label}</span>
+            <strong>{row.requests.toLocaleString()}</strong>
+            <em className={styles.good}>{row.success.toLocaleString()}</em>
+            <em className={row.failure > 0 ? styles.bad : ''}>{row.failure.toLocaleString()}</em>
           </div>
         ))}
-        {topRows.length === 0 && <div className={styles.emptyInline}>暂无 API Key 调用记录</div>}
+        {rows.length === 0 && <div className={styles.emptyInline}>暂无 API Key 调用记录</div>}
       </div>
     </section>
   );
 }
 
-function Hotspots({ rows }: { rows: GroupRow[] }) {
-  const hotspots = rows.filter((row) => row.failure > 0).slice(0, 5);
+function RequestDistributionPanel({ rows }: { rows: GroupRow[] }) {
   return (
     <section className={styles.sidePanel}>
       <div className={styles.panelHeader}>
-        <h2>失败热点</h2>
-        <span className={styles.panelHint}>按端点</span>
+        <h2>请求分布</h2>
+        <span className={styles.panelHint}>总数 / 成功 / 失败</span>
       </div>
-      <div className={styles.compactRows}>
-        {hotspots.map((row) => (
-          <div key={row.key} className={styles.compactRow}>
+      <div className={styles.distributionRows}>
+        <div className={styles.distributionHead}>
+          <span>端点</span>
+          <span>总数</span>
+          <span>成功</span>
+          <span>失败</span>
+        </div>
+        {rows.map((row) => (
+          <div key={row.key} className={styles.distributionRow}>
             <span title={row.label}>{row.label}</span>
-            <strong className={styles.bad}>{formatPercent(row.failureRate)}</strong>
-            <em>{row.failure.toLocaleString()}</em>
+            <strong>{row.requests.toLocaleString()}</strong>
+            <em className={styles.good}>{row.success.toLocaleString()}</em>
+            <em className={row.failure > 0 ? styles.bad : ''}>{row.failure.toLocaleString()}</em>
           </div>
         ))}
-        {hotspots.length === 0 && <div className={styles.emptyInline}>没有失败热点</div>}
+        {rows.length === 0 && <div className={styles.emptyInline}>暂无请求分布</div>}
       </div>
     </section>
   );
@@ -1074,7 +1051,6 @@ export function UsagePage() {
                   <SeriesChart buckets={analytics.buckets} series={latencySeries} />
                 </ChartFrame>
               </div>
-              <FailureBarChart rows={analytics.endpointRows} />
               <div className={styles.insightStack}>
                 <CostEstimatePanel rows={topCostRows} totalCost={summary.estimatedCost} />
                 <TokenBreakdownPanel total={summary.totalTokens} items={tokenBreakdown} />
@@ -1084,7 +1060,7 @@ export function UsagePage() {
               <CredentialCoolingPanel summary={credentialSummary} />
               <HealthLedger rows={analytics.accountRows} />
               <div className={styles.insightStack}>
-                <Hotspots rows={analytics.endpointRows} />
+                <RequestDistributionPanel rows={analytics.endpointRows} />
                 <APIKeyUsagePanel rows={analytics.apiKeyRows} />
               </div>
             </aside>
