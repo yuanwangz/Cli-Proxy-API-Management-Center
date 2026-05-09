@@ -1,4 +1,4 @@
-export type UsageTimeRange = '1h' | '6h' | '24h' | '7d' | '30d' | 'all';
+export type UsageTimeRange = 'today' | '3d' | '5d' | '7d' | '14d' | '30d' | 'all';
 
 export interface UsageTokens {
   input_tokens?: number;
@@ -12,8 +12,12 @@ export interface UsageTokens {
 export interface UsageDetail {
   timestamp?: string;
   source?: string;
+  source_full?: string;
+  source_hash?: string;
+  api_key_hash?: string;
   auth_index?: string | number | null;
   latency_ms?: number | null;
+  status_code?: number | null;
   tokens?: UsageTokens;
   failed?: boolean;
 }

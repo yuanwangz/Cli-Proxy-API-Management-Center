@@ -8,8 +8,12 @@ export interface UsageEvent {
   model: string;
   provider: string;
   account: string;
+  accountFull: string;
+  accountKey: string;
   authIndex: string;
   source: string;
+  sourceHash: string;
+  apiKeyHash: string;
   timestamp: string;
   timestampMs: number;
   inputTokens: number;
@@ -19,6 +23,7 @@ export interface UsageEvent {
   totalTokens: number;
   latencyMs: number | null;
   failed: boolean;
+  statusCode: number | null;
   cost: number;
 }
 
@@ -53,6 +58,7 @@ export interface TimeBucket {
 export interface GroupRow {
   key: string;
   label: string;
+  fullLabel: string;
   provider: string;
   requests: number;
   success: number;
@@ -65,6 +71,8 @@ export interface GroupRow {
   successRate: number;
   failureRate: number;
   cost: number;
+  sourceHash: string;
+  apiKeyHash: string;
 }
 
 export interface RecentUsageRow {
@@ -75,12 +83,23 @@ export interface RecentUsageRow {
   model: string;
   endpoint: string;
   account: string;
+  accountFull: string;
+  authIndex: string;
+  sourceHash: string;
+  apiKeyHash: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   latencyMs: number | null;
+  statusCode: number | null;
+  errorCode: string;
   error: string;
   failed: boolean;
+}
+
+export interface UsageFilterOption {
+  value: string;
+  label: string;
 }
 
 export interface UsageAnalyticsData {
@@ -91,36 +110,39 @@ export interface UsageAnalyticsData {
   modelRows: GroupRow[];
   accountRows: GroupRow[];
   endpointRows: GroupRow[];
+  apiKeyRows: GroupRow[];
   providerRows: GroupRow[];
   recentRows: RecentUsageRow[];
   providerOptions: string[];
   modelOptions: string[];
-  accountOptions: string[];
+  accountOptions: UsageFilterOption[];
   endpointOptions: string[];
 }
 
 export const USAGE_TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; label: string }> = [
-  { value: '1h', label: '1小时' },
-  { value: '6h', label: '6小时' },
-  { value: '24h', label: '24小时' },
+  { value: 'today', label: '今日' },
+  { value: '3d', label: '3日' },
+  { value: '5d', label: '5日' },
   { value: '7d', label: '7天' },
+  { value: '14d', label: '14天' },
   { value: '30d', label: '30天' },
   { value: 'all', label: '全部' },
 ];
 
 const RANGE_MS: Partial<Record<UsageTimeRange, number>> = {
-  '1h': 60 * 60 * 1000,
-  '6h': 6 * 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000,
+  '3d': 3 * 24 * 60 * 60 * 1000,
+  '5d': 5 * 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
   '30d': 30 * 24 * 60 * 60 * 1000,
 };
 
 const BUCKET_COUNT: Record<UsageTimeRange, number> = {
-  '1h': 12,
-  '6h': 24,
-  '24h': 24,
+  today: 24,
+  '3d': 24,
+  '5d': 20,
   '7d': 28,
+  '14d': 28,
   '30d': 30,
   all: 30,
 };
@@ -149,6 +171,25 @@ const safeText = (value: unknown, fallback = '-'): string => {
   }
   const text = String(value).trim();
   return text || fallback;
+};
+
+const maskCredential = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '-') return trimmed || '-';
+  if (trimmed.includes('***')) return trimmed;
+  if (trimmed.includes('@')) {
+    const [name, domain] = trimmed.split('@');
+    const prefix = name.slice(0, Math.min(3, name.length));
+    return `${prefix}***@${domain}`;
+  }
+  if (trimmed.length <= 8) return trimmed;
+  return `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+};
+
+export const shortHash = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed) return 'unknown';
+  return trimmed.length <= 12 ? trimmed : `${trimmed.slice(0, 7)}...${trimmed.slice(-4)}`;
 };
 
 const parseTimestampMs = (value: unknown): number => {
@@ -223,10 +264,17 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           toFiniteNumber(tokens.total_tokens) || inputTokens + outputTokens
         );
         const source = safeText(detail.source, '');
+        const sourceFull = safeText(detail.source_full, '');
+        const sourceHash = safeText(detail.source_hash, '');
+        const apiKeyHash = safeText(detail.api_key_hash, '');
         const authIndex = safeText(detail.auth_index, '');
-        const account = source || authIndex || '未标记账号';
+        const accountFull = sourceFull || (source && !source.includes('***') ? source : '');
+        const account = maskCredential(accountFull || source || authIndex || '未标记凭证');
+        const accountKey = sourceHash || accountFull || account || authIndex || 'unknown';
         const latencyValue = toFiniteNumber(detail.latency_ms);
         const latencyMs = latencyValue > 0 ? latencyValue : null;
+        const statusCodeValue = toFiniteNumber(detail.status_code);
+        const statusCode = statusCodeValue > 0 ? statusCodeValue : null;
         const provider = inferProvider(modelName, `${account} ${authIndex}`, endpointName);
 
         events.push({
@@ -237,8 +285,12 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           model: safeText(modelName, '-'),
           provider,
           account,
+          accountFull,
+          accountKey,
           authIndex,
           source,
+          sourceHash,
+          apiKeyHash,
           timestamp: safeText(detail.timestamp, ''),
           timestampMs,
           inputTokens,
@@ -248,6 +300,7 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           totalTokens,
           latencyMs,
           failed: detail.failed === true,
+          statusCode,
           cost: estimateCost(modelName, inputTokens, outputTokens),
         });
       });
@@ -258,14 +311,19 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
 };
 
 export const rangeStartMs = (events: UsageEvent[], range: UsageTimeRange, nowMs = Date.now()): number => {
+  if (range === 'today') {
+    const today = new Date(nowMs);
+    today.setHours(0, 0, 0, 0);
+    return today.getTime();
+  }
   if (range !== 'all') {
-    return nowMs - (RANGE_MS[range] ?? RANGE_MS['24h'] ?? 0);
+    return nowMs - (RANGE_MS[range] ?? RANGE_MS['7d'] ?? 0);
   }
   const oldest = events.reduce((min, event) => {
     if (!event.timestampMs) return min;
     return Math.min(min, event.timestampMs);
   }, Number.POSITIVE_INFINITY);
-  return Number.isFinite(oldest) ? oldest : nowMs - (RANGE_MS['24h'] ?? 0);
+  return Number.isFinite(oldest) ? oldest : rangeStartMs(events, 'today', nowMs);
 };
 
 export const filterEvents = (
@@ -286,7 +344,7 @@ export const filterEvents = (
     if (event.timestampMs && event.timestampMs > nowMs + 60_000) return false;
     if (filters.provider !== 'all' && event.provider !== filters.provider) return false;
     if (filters.model !== 'all' && event.model !== filters.model) return false;
-    if (filters.account !== 'all' && event.account !== filters.account) return false;
+    if (filters.account !== 'all' && event.accountKey !== filters.account) return false;
     if (filters.endpoint !== 'all' && event.endpoint !== filters.endpoint) return false;
     if (filters.failedOnly && !event.failed) return false;
     return true;
@@ -342,7 +400,7 @@ export const summarizeEvents = (events: UsageEvent[]): UsageSummary => {
 
 const bucketLabel = (startMs: number, range: UsageTimeRange): string => {
   const date = new Date(startMs);
-  if (range === '1h' || range === '6h' || range === '24h') {
+  if (range === 'today') {
     return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   }
   return date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
@@ -396,6 +454,7 @@ export const buildTimeBuckets = (
 const emptyGroupRow = (key: string, label: string, provider = ''): GroupRow => ({
   key,
   label,
+  fullLabel: label,
   provider,
   requests: 0,
   success: 0,
@@ -408,19 +467,27 @@ const emptyGroupRow = (key: string, label: string, provider = ''): GroupRow => (
   successRate: 100,
   failureRate: 0,
   cost: 0,
+  sourceHash: '',
+  apiKeyHash: '',
 });
 
 const buildGroupRows = (
   events: UsageEvent[],
   keyOf: (event: UsageEvent) => string,
   labelOf: (event: UsageEvent) => string,
-  providerOf: (event: UsageEvent) => string
+  providerOf: (event: UsageEvent) => string,
+  fullLabelOf: (event: UsageEvent) => string = labelOf
 ): GroupRow[] => {
   const rows = new Map<string, { row: GroupRow; latencies: number[] }>();
   events.forEach((event) => {
     const key = keyOf(event);
     const current = rows.get(key) ?? {
-      row: emptyGroupRow(key, labelOf(event), providerOf(event)),
+      row: {
+        ...emptyGroupRow(key, labelOf(event), providerOf(event)),
+        fullLabel: fullLabelOf(event) || labelOf(event),
+        sourceHash: event.sourceHash,
+        apiKeyHash: event.apiKeyHash,
+      },
       latencies: [],
     };
     current.row.requests += 1;
@@ -431,6 +498,8 @@ const buildGroupRows = (
     current.row.outputTokens += event.outputTokens;
     current.row.cost += event.cost;
     if (!current.row.provider) current.row.provider = providerOf(event);
+    if (!current.row.sourceHash) current.row.sourceHash = event.sourceHash;
+    if (!current.row.apiKeyHash) current.row.apiKeyHash = event.apiKeyHash;
     if (event.latencyMs !== null) current.latencies.push(event.latencyMs);
     rows.set(key, current);
   });
@@ -453,6 +522,17 @@ const buildGroupRows = (
 
 const uniqueSorted = (values: string[]) =>
   Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+const uniqueAccountOptions = (events: UsageEvent[]): UsageFilterOption[] => {
+  const options = new Map<string, string>();
+  events.forEach((event) => {
+    if (!event.accountKey) return;
+    options.set(event.accountKey, event.account);
+  });
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+};
 
 export const buildUsageAnalytics = (
   payload: UsagePayload | null | undefined,
@@ -477,15 +557,23 @@ export const buildUsageAnalytics = (
     modelRows: buildGroupRows(filteredEvents, (event) => event.model, (event) => event.model, (event) => event.provider),
     accountRows: buildGroupRows(
       filteredEvents,
-      (event) => `${event.provider}:${event.account}`,
+      (event) => `${event.provider}:${event.accountKey}`,
       (event) => event.account,
-      (event) => event.provider
+      (event) => event.provider,
+      (event) => event.accountFull || event.source || event.account
     ),
     endpointRows: buildGroupRows(
       filteredEvents,
       (event) => event.endpoint,
       (event) => event.path || event.endpoint,
       (event) => event.provider
+    ),
+    apiKeyRows: buildGroupRows(
+      filteredEvents.filter((event) => event.apiKeyHash),
+      (event) => event.apiKeyHash,
+      (event) => `Key ${shortHash(event.apiKeyHash)}`,
+      () => 'Client',
+      (event) => event.apiKeyHash
     ),
     providerRows: buildGroupRows(filteredEvents, (event) => event.provider, (event) => event.provider, (event) => event.provider),
     recentRows: filteredEvents.map((event) => ({
@@ -498,21 +586,27 @@ export const buildUsageAnalytics = (
             minute: '2-digit',
           })
         : '-',
-      status: event.failed ? '失败' : '200',
+      status: event.statusCode ? String(event.statusCode) : event.failed ? '失败' : '200',
       provider: event.provider,
       model: event.model,
       endpoint: event.path || event.endpoint,
       account: event.account,
+      accountFull: event.accountFull,
+      authIndex: event.authIndex,
+      sourceHash: event.sourceHash,
+      apiKeyHash: event.apiKeyHash,
       inputTokens: event.inputTokens,
       outputTokens: event.outputTokens,
       totalTokens: event.totalTokens,
       latencyMs: event.latencyMs,
-      error: event.failed ? '上游请求失败' : '—',
+      statusCode: event.statusCode,
+      errorCode: event.failed && event.statusCode ? String(event.statusCode) : '—',
+      error: event.failed ? (event.statusCode ? `HTTP ${event.statusCode}` : '上游请求失败') : '—',
       failed: event.failed,
     })),
     providerOptions: uniqueSorted(events.map((event) => event.provider)),
     modelOptions: uniqueSorted(events.map((event) => event.model)),
-    accountOptions: uniqueSorted(events.map((event) => event.account)),
+    accountOptions: uniqueAccountOptions(events),
     endpointOptions: uniqueSorted(events.map((event) => event.endpoint)),
   };
 };

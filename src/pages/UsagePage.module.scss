@@ -245,7 +245,7 @@
 
 .mainGrid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(400px, 0.48fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: start;
 }
@@ -254,6 +254,13 @@
 .sideColumn {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sidePair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   min-width: 0;
 }
@@ -436,11 +443,74 @@
   color: var(--usage-muted);
   font-size: 12px;
 
-  span:first-child {
-    overflow: hidden;
+  > .credentialCell {
     padding-left: 15px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+}
+
+.credentialCell {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.credentialButton {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 760;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.credentialPopover {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  display: grid;
+  gap: 8px;
+  width: min(360px, 82vw);
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 86%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 98%, #fff8ec);
+  box-shadow:
+    0 18px 44px rgb(54 45 32 / 0.16),
+    inset 0 1px 0 rgb(255 255 255 / 0.45);
+  white-space: normal;
+
+  span {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  em {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 720;
+  }
+
+  strong {
+    color: var(--usage-ink);
+    font-size: 12px;
+    font-weight: 760;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -487,10 +557,17 @@
   gap: 9px;
 }
 
-.warningRow {
+.apiKeyRows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 13px 0;
+}
+
+.apiKeyRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 94px 52px;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) 54px 60px;
+  gap: 8px;
   align-items: center;
   font-size: 12px;
 
@@ -502,7 +579,43 @@
     white-space: nowrap;
   }
 
-  span {
+  strong {
+    color: var(--usage-ink);
+  }
+
+  div span {
+    margin-top: 2px;
+    color: var(--usage-muted);
+  }
+
+  em {
+    color: var(--usage-ink);
+    font-style: normal;
+    font-weight: 780;
+    text-align: right;
+  }
+
+  > span {
+    text-align: right;
+  }
+}
+
+.warningRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 94px 52px;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+
+  > div > strong,
+  > div > span:not(.credentialCell) {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > div > span:not(.credentialCell) {
     margin-top: 2px;
     color: var(--usage-muted);
   }
@@ -586,7 +699,7 @@
 
 .usageTable {
   width: 100%;
-  min-width: 1040px;
+  min-width: 1100px;
   border-collapse: collapse;
   font-size: 12px;
 
@@ -740,6 +853,10 @@
   }
 
   .chartPair {
+    grid-template-columns: 1fr;
+  }
+
+  .sidePair {
     grid-template-columns: 1fr;
   }
 }

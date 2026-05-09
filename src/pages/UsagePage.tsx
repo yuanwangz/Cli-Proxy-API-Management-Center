@@ -231,6 +231,63 @@ function MetricCard({
   );
 }
 
+function CredentialChip({
+  label,
+  fullLabel,
+  authIndex,
+  sourceHash,
+  apiKeyHash,
+}: {
+  label: string;
+  fullLabel?: string;
+  authIndex?: string;
+  sourceHash?: string;
+  apiKeyHash?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const fullValue = fullLabel?.trim();
+  const hasDetails = Boolean(fullValue || authIndex || sourceHash || apiKeyHash);
+
+  return (
+    <span className={styles.credentialCell}>
+      <button
+        type="button"
+        className={styles.credentialButton}
+        onClick={() => setOpen((current) => !current)}
+        disabled={!hasDetails}
+      >
+        {label}
+      </button>
+      {open && hasDetails && (
+        <span className={styles.credentialPopover} role="dialog">
+          <span>
+            <em>完整凭证</em>
+            <strong>{fullValue || '后端未提供完整凭证名'}</strong>
+          </span>
+          {authIndex && (
+            <span>
+              <em>凭证索引</em>
+              <strong>{authIndex}</strong>
+            </span>
+          )}
+          {sourceHash && (
+            <span>
+              <em>凭证指纹</em>
+              <strong>{sourceHash}</strong>
+            </span>
+          )}
+          {apiKeyHash && (
+            <span>
+              <em>调用 API Key</em>
+              <strong>{apiKeyHash}</strong>
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function HealthLedger({ rows }: { rows: GroupRow[] }) {
   const grouped = rows.slice(0, 8).reduce<Record<string, GroupRow[]>>((acc, row) => {
     const key = row.provider || 'Other';
@@ -259,7 +316,12 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
             </div>
             {providerRows.map((row) => (
               <div key={row.key} className={styles.ledgerRow}>
-                <span title={row.label}>{row.label}</span>
+                <CredentialChip
+                  label={row.label}
+                  fullLabel={row.fullLabel}
+                  sourceHash={row.sourceHash}
+                  apiKeyHash={row.apiKeyHash}
+                />
                 <span>{formatCompactNumber(row.requests)}</span>
                 <span className={row.successRate >= 95 ? styles.good : styles.bad}>
                   {formatPercent(row.successRate)}
@@ -270,6 +332,34 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
           </div>
         ))}
         {rows.length === 0 && <div className={styles.emptyInline}>暂无凭证统计</div>}
+      </div>
+    </section>
+  );
+}
+
+function APIKeyUsagePanel({ rows }: { rows: GroupRow[] }) {
+  const topRows = rows.slice(0, 6);
+
+  return (
+    <section className={styles.sidePanel}>
+      <div className={styles.panelHeader}>
+        <h2>API Key 调用</h2>
+        <span className={styles.panelHint}>按调用方 Key</span>
+      </div>
+      <div className={styles.apiKeyRows}>
+        {topRows.map((row) => (
+          <div key={row.key} className={styles.apiKeyRow}>
+            <div>
+              <strong>{row.label}</strong>
+              <span>{formatCompactNumber(row.totalTokens)} Token</span>
+            </div>
+            <em>{row.requests.toLocaleString()}</em>
+            <span className={row.successRate >= 95 ? styles.good : styles.bad}>
+              {formatPercent(row.successRate)}
+            </span>
+          </div>
+        ))}
+        {topRows.length === 0 && <div className={styles.emptyInline}>暂无 API Key 调用记录</div>}
       </div>
     </section>
   );
@@ -313,7 +403,12 @@ function QuotaWarnings({ rows }: { rows: GroupRow[] }) {
         {warnings.map((row) => (
           <div key={row.key} className={styles.warningRow}>
             <div>
-              <strong>{row.label}</strong>
+              <CredentialChip
+                label={row.label}
+                fullLabel={row.fullLabel}
+                sourceHash={row.sourceHash}
+                apiKeyHash={row.apiKeyHash}
+              />
               <span>{row.provider}</span>
             </div>
             <div className={styles.warningMeter}>
@@ -428,6 +523,7 @@ function RecentRequestsTable({
               <th>模型</th>
               <th>端点</th>
               <th>凭证账号</th>
+              <th>错误码</th>
               <th>输入</th>
               <th>输出</th>
               <th>总量</th>
@@ -447,7 +543,16 @@ function RecentRequestsTable({
                 <td>{row.provider}</td>
                 <td>{row.model}</td>
                 <td>{row.endpoint}</td>
-                <td>{row.account}</td>
+                <td>
+                  <CredentialChip
+                    label={row.account}
+                    fullLabel={row.accountFull}
+                    authIndex={row.authIndex}
+                    sourceHash={row.sourceHash}
+                    apiKeyHash={row.apiKeyHash}
+                  />
+                </td>
+                <td>{row.errorCode}</td>
                 <td>{formatCompactNumber(row.inputTokens)}</td>
                 <td>{formatCompactNumber(row.outputTokens)}</td>
                 <td>{formatCompactNumber(row.totalTokens)}</td>
@@ -720,7 +825,7 @@ export function UsagePage() {
           onChange={(value) => setFilter('account', value)}
           options={[
             { value: 'all', label: '全部凭证' },
-            ...analytics.accountOptions.map((value) => ({ value, label: value })),
+            ...analytics.accountOptions,
           ]}
         />
         <Select
@@ -819,17 +924,22 @@ export function UsagePage() {
             </div>
             <aside className={styles.sideColumn}>
               <HealthLedger rows={analytics.accountRows} />
-              <Hotspots rows={analytics.endpointRows} />
-              <QuotaWarnings rows={analytics.accountRows} />
-              <DonutPanel
-                title="模型成本"
-                center={formatCurrency(summary.estimatedCost)}
-                items={topCostRows.map((row, index) => ({
-                  label: row.label,
-                  value: row.cost,
-                  color: ['#7ca982', '#bfa36d', '#8a8174', '#c65746', '#d7c7a1'][index] ?? '#8a8174',
-                }))}
-              />
+              <div className={styles.sidePair}>
+                <Hotspots rows={analytics.endpointRows} />
+                <APIKeyUsagePanel rows={analytics.apiKeyRows} />
+              </div>
+              <div className={styles.sidePair}>
+                <QuotaWarnings rows={analytics.accountRows} />
+                <DonutPanel
+                  title="模型成本"
+                  center={formatCurrency(summary.estimatedCost)}
+                  items={topCostRows.map((row, index) => ({
+                    label: row.label,
+                    value: row.cost,
+                    color: ['#7ca982', '#bfa36d', '#8a8174', '#c65746', '#d7c7a1'][index] ?? '#8a8174',
+                  }))}
+                />
+              </div>
               <DonutPanel title="Token 构成" center={formatCompactNumber(summary.totalTokens)} items={tokenBreakdown} />
             </aside>
           </div>
