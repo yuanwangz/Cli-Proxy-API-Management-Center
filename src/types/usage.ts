@@ -14,6 +14,7 @@ export interface UsageDetail {
   source?: string;
   source_full?: string;
   source_hash?: string;
+  api_key?: string;
   api_key_hash?: string;
   auth_index?: string | number | null;
   latency_ms?: number | null;

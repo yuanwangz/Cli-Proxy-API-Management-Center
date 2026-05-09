@@ -10,7 +10,7 @@ import {
   IconUpload,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { authFilesApi, usageApi } from '@/services/api';
+import { apiKeysApi, authFilesApi, usageApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types/authFile';
 import type { UsagePayload, UsageTimeRange } from '@/types/usage';
@@ -23,6 +23,7 @@ import {
   formatLatency,
   formatPercent,
   getModelPriceEstimate,
+  maskCredential,
   type GroupRow,
   type TimeBucket,
 } from '@/utils/usageAnalytics';
@@ -59,6 +60,28 @@ const chartPadding = { top: 12, right: 12, bottom: 22, left: 38 };
 const RECENT_PAGE_SIZES = [25, 50, 100];
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+const sha256Hex = async (value: string): Promise<string> => {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return '';
+  const digest = await subtle.digest('SHA-256', new TextEncoder().encode(value.trim()));
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+};
+
+const buildApiKeyLabelsByHash = async (keys: string[]): Promise<Record<string, string>> => {
+  const entries = await Promise.all(
+    keys
+      .map((key) => key.trim())
+      .filter(Boolean)
+      .map(async (key) => {
+        const hash = await sha256Hex(key);
+        return hash ? ([hash, maskCredential(key)] as [string, string]) : null;
+      })
+  );
+  return Object.fromEntries(entries.filter((entry): entry is [string, string] => Boolean(entry)));
+};
 
 type CredentialCoolingRow = {
   name: string;
@@ -326,18 +349,17 @@ function CredentialChip({
   label,
   fullLabel,
   authIndex,
-  sourceHash,
-  apiKeyHash,
+  apiKey,
 }: {
   label: string;
   fullLabel?: string;
   authIndex?: string;
-  sourceHash?: string;
-  apiKeyHash?: string;
+  apiKey?: string;
 }) {
   const [open, setOpen] = useState(false);
   const fullValue = fullLabel?.trim();
-  const hasDetails = Boolean(fullValue || authIndex || sourceHash || apiKeyHash);
+  const maskedFullValue = fullValue ? maskCredential(fullValue) : '';
+  const hasDetails = Boolean(maskedFullValue || authIndex || apiKey);
 
   return (
     <span className={styles.credentialCell}>
@@ -352,8 +374,8 @@ function CredentialChip({
       {open && hasDetails && (
         <span className={styles.credentialPopover} role="dialog">
           <span>
-            <em>完整凭证</em>
-            <strong>{fullValue || '后端未提供完整凭证名'}</strong>
+            <em>凭证脱敏值</em>
+            <strong>{maskedFullValue || label || '后端未提供凭证值'}</strong>
           </span>
           {authIndex && (
             <span>
@@ -361,16 +383,10 @@ function CredentialChip({
               <strong>{authIndex}</strong>
             </span>
           )}
-          {sourceHash && (
-            <span>
-              <em>凭证指纹</em>
-              <strong>{sourceHash}</strong>
-            </span>
-          )}
-          {apiKeyHash && (
+          {apiKey && (
             <span>
               <em>调用 API Key</em>
-              <strong>{apiKeyHash}</strong>
+              <strong>{apiKey}</strong>
             </span>
           )}
         </span>
@@ -410,8 +426,7 @@ function HealthLedger({ rows }: { rows: GroupRow[] }) {
                 <CredentialChip
                   label={row.label}
                   fullLabel={row.fullLabel}
-                  sourceHash={row.sourceHash}
-                  apiKeyHash={row.apiKeyHash}
+                  apiKey={row.apiKey}
                 />
                 <span>{formatCompactNumber(row.requests)}</span>
                 <span className={row.successRate >= 95 ? styles.good : styles.bad}>
@@ -637,7 +652,6 @@ function RecentRequestsTable({
               <th>模型</th>
               <th>端点</th>
               <th>凭证账号</th>
-              <th>错误码</th>
               <th>输入</th>
               <th>输出</th>
               <th>总量</th>
@@ -662,11 +676,9 @@ function RecentRequestsTable({
                     label={row.account}
                     fullLabel={row.accountFull}
                     authIndex={row.authIndex}
-                    sourceHash={row.sourceHash}
-                    apiKeyHash={row.apiKeyHash}
+                    apiKey={row.apiKey}
                   />
                 </td>
-                <td>{row.errorCode}</td>
                 <td>{formatCompactNumber(row.inputTokens)}</td>
                 <td>{formatCompactNumber(row.outputTokens)}</td>
                 <td>{formatCompactNumber(row.totalTokens)}</td>
@@ -715,6 +727,7 @@ export function UsagePage() {
   const [error, setError] = useState<string | null>(null);
   const [statisticsEnabled, setStatisticsEnabled] = useState<boolean | null>(null);
   const [filters, setFilters] = useState<UsageFilters>(DEFAULT_FILTERS);
+  const [apiKeyLabelsByHash, setApiKeyLabelsByHash] = useState<Record<string, string>>({});
   const [credentialSummary, setCredentialSummary] = useState<CredentialHealthSummary>(
     EMPTY_CREDENTIAL_SUMMARY
   );
@@ -725,7 +738,7 @@ export function UsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const [usageData, enabled, authFilesResult] = await Promise.all([
+      const [usageData, enabled, authFilesResult, apiKeyLabels] = await Promise.all([
         usageApi.getUsage(),
         usageApi.getStatisticsEnabled().catch(() => null),
         authFilesApi
@@ -735,9 +748,14 @@ export function UsagePage() {
             data: null,
             error: err instanceof Error ? err.message : '凭证列表读取失败',
           })),
+        apiKeysApi
+          .list()
+          .then((keys) => buildApiKeyLabelsByHash(keys))
+          .catch(() => ({} as Record<string, string>)),
       ]);
       setPayload(usageData);
       setStatisticsEnabled(enabled);
+      setApiKeyLabelsByHash(apiKeyLabels);
       setCredentialSummary(
         authFilesResult.data
           ? buildCredentialHealthSummary(authFilesResult.data.files ?? [])
@@ -758,7 +776,10 @@ export function UsagePage() {
     void loadUsage();
   }, [loadUsage]);
 
-  const analytics = useMemo(() => buildUsageAnalytics(payload, filters), [filters, payload]);
+  const analytics = useMemo(
+    () => buildUsageAnalytics(payload, filters, apiKeyLabelsByHash),
+    [apiKeyLabelsByHash, filters, payload]
+  );
 
   const setFilter = <K extends keyof UsageFilters>(key: K, value: UsageFilters[K]) => {
     setFilters((current) => ({ ...current, [key]: value }));

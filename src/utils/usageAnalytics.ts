@@ -13,6 +13,7 @@ export interface UsageEvent {
   authIndex: string;
   source: string;
   sourceHash: string;
+  apiKey: string;
   apiKeyHash: string;
   timestamp: string;
   timestampMs: number;
@@ -72,6 +73,7 @@ export interface GroupRow {
   failureRate: number;
   cost: number;
   sourceHash: string;
+  apiKey: string;
   apiKeyHash: string;
 }
 
@@ -86,13 +88,13 @@ export interface RecentUsageRow {
   accountFull: string;
   authIndex: string;
   sourceHash: string;
+  apiKey: string;
   apiKeyHash: string;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   latencyMs: number | null;
   statusCode: number | null;
-  errorCode: string;
   error: string;
   failed: boolean;
 }
@@ -179,7 +181,7 @@ const safeText = (value: unknown, fallback = '-'): string => {
   return text || fallback;
 };
 
-const maskCredential = (value: string): string => {
+export const maskCredential = (value: string): string => {
   const trimmed = value.trim();
   if (!trimmed || trimmed === '-') return trimmed || '-';
   if (trimmed.includes('***')) return trimmed;
@@ -248,7 +250,10 @@ const percentile = (values: number[], pct: number): number | null => {
   return sorted[index];
 };
 
-export const flattenUsageEvents = (payload: UsagePayload | null | undefined): UsageEvent[] => {
+export const flattenUsageEvents = (
+  payload: UsagePayload | null | undefined,
+  apiKeyLabelsByHash: Record<string, string> = {}
+): UsageEvent[] => {
   const apis = payload?.apis;
   if (!apis) return [];
 
@@ -277,7 +282,9 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
         const source = safeText(detail.source, '');
         const sourceFull = safeText(detail.source_full, '');
         const sourceHash = safeText(detail.source_hash, '');
+        const apiKeyFromPayload = safeText(detail.api_key, '');
         const apiKeyHash = safeText(detail.api_key_hash, '');
+        const apiKey = apiKeyFromPayload || (apiKeyHash ? apiKeyLabelsByHash[apiKeyHash] ?? '' : '');
         const authIndex = safeText(detail.auth_index, '');
         const accountFull = sourceFull || (source && !source.includes('***') ? source : '');
         const account = maskCredential(accountFull || source || authIndex || '未标记凭证');
@@ -301,6 +308,7 @@ export const flattenUsageEvents = (payload: UsagePayload | null | undefined): Us
           authIndex,
           source,
           sourceHash,
+          apiKey,
           apiKeyHash,
           timestamp: safeText(detail.timestamp, ''),
           timestampMs,
@@ -480,6 +488,7 @@ const emptyGroupRow = (key: string, label: string, provider = ''): GroupRow => (
   cost: 0,
   sourceHash: '',
   apiKeyHash: '',
+  apiKey: '',
 });
 
 const buildGroupRows = (
@@ -497,6 +506,7 @@ const buildGroupRows = (
         ...emptyGroupRow(key, labelOf(event), providerOf(event)),
         fullLabel: fullLabelOf(event) || labelOf(event),
         sourceHash: event.sourceHash,
+        apiKey: event.apiKey,
         apiKeyHash: event.apiKeyHash,
       },
       latencies: [],
@@ -510,6 +520,7 @@ const buildGroupRows = (
     current.row.cost += event.cost;
     if (!current.row.provider) current.row.provider = providerOf(event);
     if (!current.row.sourceHash) current.row.sourceHash = event.sourceHash;
+    if (!current.row.apiKey) current.row.apiKey = event.apiKey;
     if (!current.row.apiKeyHash) current.row.apiKeyHash = event.apiKeyHash;
     if (event.latencyMs !== null) current.latencies.push(event.latencyMs);
     rows.set(key, current);
@@ -555,9 +566,10 @@ export const buildUsageAnalytics = (
     endpoint: string;
     failedOnly: boolean;
   },
+  apiKeyLabelsByHash: Record<string, string> = {},
   nowMs = Date.now()
 ): UsageAnalyticsData => {
-  const events = flattenUsageEvents(payload);
+  const events = flattenUsageEvents(payload, apiKeyLabelsByHash);
   const filteredEvents = filterEvents(events, filters, nowMs);
 
   return {
@@ -580,11 +592,11 @@ export const buildUsageAnalytics = (
       (event) => event.provider
     ),
     apiKeyRows: buildGroupRows(
-      filteredEvents.filter((event) => event.apiKeyHash),
-      (event) => event.apiKeyHash,
-      (event) => `Key ${shortHash(event.apiKeyHash)}`,
+      filteredEvents.filter((event) => event.apiKey || event.apiKeyHash),
+      (event) => event.apiKeyHash || event.apiKey,
+      (event) => event.apiKey || '未匹配 API Key',
       () => 'Client',
-      (event) => event.apiKeyHash
+      (event) => event.apiKey || '配置中未找到该 API Key'
     ),
     providerRows: buildGroupRows(filteredEvents, (event) => event.provider, (event) => event.provider, (event) => event.provider),
     recentRows: filteredEvents.map((event) => ({
@@ -605,14 +617,14 @@ export const buildUsageAnalytics = (
       accountFull: event.accountFull,
       authIndex: event.authIndex,
       sourceHash: event.sourceHash,
+      apiKey: event.apiKey,
       apiKeyHash: event.apiKeyHash,
       inputTokens: event.inputTokens,
       outputTokens: event.outputTokens,
       totalTokens: event.totalTokens,
       latencyMs: event.latencyMs,
       statusCode: event.statusCode,
-      errorCode: event.failed && event.statusCode ? String(event.statusCode) : '—',
-      error: event.failed ? (event.statusCode ? `HTTP ${event.statusCode}` : '上游请求失败') : '—',
+      error: event.failed ? '请求失败' : '—',
       failed: event.failed,
     })),
     providerOptions: uniqueSorted(events.map((event) => event.provider)),
