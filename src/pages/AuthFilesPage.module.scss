@@ -2,9 +2,12 @@
 @use '../styles/mixins' as *;
 
 .container {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
   padding-bottom: calc(
     var(--auth-files-action-bar-height, 0px) + 16px + env(safe-area-inset-bottom)
   );
@@ -13,12 +16,15 @@
 .pageHeader {
   display: flex;
   flex-direction: column;
-  gap: $spacing-sm;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
 }
 
 .pageTitle {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 820;
+  line-height: 1.16;
   color: var(--text-primary);
   margin: 0;
 }
@@ -90,10 +96,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
 
   @include mobile {
     padding: 10px;
@@ -139,12 +145,12 @@
   align-items: center;
   gap: 8px;
   padding: 7px 12px 7px 8px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-primary));
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
@@ -232,10 +238,10 @@
 }
 
 .filterControlsPanel {
-  padding: 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
 }
 
 .filterControls {
@@ -299,9 +305,9 @@
   align-items: center;
   min-height: 40px;
   padding: 0 2px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
-  background: color-mix(in srgb, var(--bg-secondary) 50%, transparent);
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 66%, transparent);
 }
 
 .filterToggle {
@@ -658,12 +664,13 @@
 .fileCard {
   position: relative;
   overflow: hidden;
-  background-color: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  --glass-blur: 8px;
-  backdrop-filter: var(--glass-backdrop-filter);
-  -webkit-backdrop-filter: var(--glass-backdrop-filter);
-  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
-  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 96%, transparent),
+    color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary))
+  );
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 8px;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -675,8 +682,8 @@
 
   &:hover {
     transform: translateY(-1px);
-    box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.15);
-    border-color: color-mix(in srgb, var(--primary-color) 28%, var(--border-color));
+    box-shadow: 0 12px 30px rgb(45 38 28 / 0.08);
+    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--border-color));
   }
 }
 

@@ -23,7 +23,6 @@ import {
   IconSidebarSystem,
   IconSidebarUsage,
 } from '@/components/ui/icons';
-import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import {
   useAuthStore,
   useConfigStore,
@@ -157,6 +156,24 @@ const headerIcons = {
   ),
 };
 
+function SidebarBrandLogo() {
+  return (
+    <svg
+      className="sidebar-brand-logo"
+      viewBox="0 0 40 40"
+      role="img"
+      aria-label="CLI Proxy"
+    >
+      <path d="M20 2.8 34.7 11.4v17.2L20 37.2 5.3 28.6V11.4L20 2.8Z" fill="#5b3c28" />
+      <path d="M20 7.8 30.1 13.7v12.6L20 32.2 9.9 26.3V13.7L20 7.8Z" fill="#f6ead7" />
+      <path d="M20 10.4 27.6 14.8 20 19.2 12.4 14.8 20 10.4Z" fill="#b98b5e" />
+      <path d="M12.4 16.6 19 20.4v7.8l-6.6-3.8v-7.8Z" fill="#8a6041" />
+      <path d="M27.6 16.6 21 20.4v7.8l6.6-3.8v-7.8Z" fill="#d3aa78" />
+      <path d="M20 19.2v9" stroke="#5b3c28" strokeWidth="1.4" strokeLinecap="round" opacity="0.65" />
+    </svg>
+  );
+}
+
 const THEME_CARDS: Array<{
   key: Theme;
   labelKey: string;
@@ -214,6 +231,8 @@ export function MainLayout() {
   const location = useLocation();
 
   const logout = useAuthStore((state) => state.logout);
+  const connectionStatus = useAuthStore((state) => state.connectionStatus);
+  const serverVersion = useAuthStore((state) => state.serverVersion);
 
   const config = useConfigStore((state) => state.config);
   const fetchConfig = useConfigStore((state) => state.fetchConfig);
@@ -234,9 +253,20 @@ export function MainLayout() {
   const headerRef = useRef<HTMLElement | null>(null);
 
   const fullBrandName = 'CLI Proxy API Management Center';
-  const abbrBrandName = t('title.abbr');
+  const brandName = 'CLI Proxy';
+  const cleanVersion = (version?: string | null) => version?.trim().replace(/^[vV]+/, '') || '';
+  const sidebarVersionValue = cleanVersion(serverVersion) || cleanVersion(__APP_VERSION__);
+  const sidebarVersion = sidebarVersionValue ? `CLI Proxy v${sidebarVersionValue}` : 'CLI Proxy';
   const isLogsPage = location.pathname.startsWith('/logs');
   const showSidebarLabels = !sidebarCollapsed || sidebarOpen;
+  const sidebarStatusText =
+    connectionStatus === 'connected'
+      ? t('sidebar.system_ok')
+      : connectionStatus === 'connecting'
+        ? t('common.connecting_status')
+        : connectionStatus === 'error'
+          ? t('common.error')
+          : t('common.disconnected_status');
 
   // 将顶部悬浮控制区高度写入 CSS 变量，供移动端粘性元素和浮层避让。
   useLayoutEffect(() => {
@@ -650,8 +680,13 @@ export function MainLayout() {
           className={`sidebar ${sidebarOpen ? 'open' : ''} ${sidebarCollapsed ? 'collapsed' : ''}`}
         >
           <div className="sidebar-brand" title={fullBrandName}>
-            <img src={INLINE_LOGO_JPEG} alt="CPAMC logo" className="sidebar-brand-logo" />
-            {showSidebarLabels && <span className="sidebar-brand-title">{abbrBrandName}</span>}
+            <SidebarBrandLogo />
+            {showSidebarLabels && (
+              <span className="sidebar-brand-copy">
+                <span className="sidebar-brand-title">{brandName}</span>
+                <span className="sidebar-brand-subtitle">{t('sidebar.brand_subtitle')}</span>
+              </span>
+            )}
           </div>
 
           <div className="nav-section">
@@ -668,6 +703,19 @@ export function MainLayout() {
               </NavLink>
             ))}
           </div>
+
+          {showSidebarLabels && (
+            <div className="sidebar-footer">
+              <div className={`sidebar-health sidebar-health-${connectionStatus}`}>
+                <span className="sidebar-health-dot" aria-hidden="true" />
+                <span className="sidebar-health-copy">
+                  <span className="sidebar-health-title">{t('sidebar.system_status')}</span>
+                  <span className="sidebar-health-text">{sidebarStatusText}</span>
+                </span>
+              </div>
+              <div className="sidebar-version">{sidebarVersion}</div>
+            </div>
+          )}
         </aside>
 
         <div className={`content${isLogsPage ? ' content-logs' : ''}`} ref={contentRef}>

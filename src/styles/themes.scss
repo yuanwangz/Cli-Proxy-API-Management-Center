@@ -58,10 +58,17 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
-  --sidebar-surface: linear-gradient(180deg, #fffaf0 0%, #f1ebdf 100%);
-  --sidebar-surface-border: #e5dccd;
-  --sidebar-active-bg: rgba(111, 92, 67, 0.12);
-  --sidebar-active-shadow: inset 3px 0 0 #7c6b55;
+  --sidebar-surface: transparent;
+  --sidebar-surface-border: transparent;
+  --sidebar-text: #241f19;
+  --sidebar-muted: #4d463d;
+  --sidebar-subtle: #8f877c;
+  --sidebar-icon-bg: transparent;
+  --sidebar-active-bg: #e9e2d8;
+  --sidebar-active-text: #241f19;
+  --sidebar-active-shadow: inset 4px 0 0 #7d654e, 0 10px 22px rgb(66 52 34 / 0.08);
+  --sidebar-health-bg: #fffdf8;
+  --sidebar-health-border: #e9e2d7;
 
   // Glass effect (blurred surfaces)
   --glass-blur: 12px;
@@ -127,10 +134,17 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
-  --sidebar-surface: linear-gradient(180deg, #ffffff 0%, #f7f4ed 100%);
-  --sidebar-surface-border: #e7e1d8;
-  --sidebar-active-bg: rgba(111, 92, 67, 0.1);
-  --sidebar-active-shadow: inset 3px 0 0 #7c6b55;
+  --sidebar-surface: transparent;
+  --sidebar-surface-border: transparent;
+  --sidebar-text: #241f19;
+  --sidebar-muted: #4d463d;
+  --sidebar-subtle: #8f877c;
+  --sidebar-icon-bg: transparent;
+  --sidebar-active-bg: #eee8de;
+  --sidebar-active-text: #241f19;
+  --sidebar-active-shadow: inset 4px 0 0 #7d654e, 0 10px 22px rgb(66 52 34 / 0.07);
+  --sidebar-health-bg: #fffdf8;
+  --sidebar-health-border: #e8e2d8;
 }
 
 // 深色主题（#191919）
@@ -189,10 +203,17 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
-  --sidebar-surface: linear-gradient(180deg, #211f1b 0%, #181613 100%);
-  --sidebar-surface-border: #3f3932;
-  --sidebar-active-bg: rgba(255, 244, 220, 0.1);
-  --sidebar-active-shadow: inset 3px 0 0 #b8a37a;
+  --sidebar-surface: linear-gradient(180deg, #252019 0%, #16130f 100%);
+  --sidebar-surface-border: rgba(255, 244, 221, 0.11);
+  --sidebar-text: #f4eadb;
+  --sidebar-muted: #9f927f;
+  --sidebar-icon-bg: rgba(255, 244, 221, 0.07);
+  --sidebar-active-bg: rgba(220, 184, 98, 0.14);
+  --sidebar-active-text: #fff5df;
+  --sidebar-active-shadow: inset 2px 0 0 #dcb862, 0 12px 26px rgba(0, 0, 0, 0.22);
+  --sidebar-subtle: #9f927f;
+  --sidebar-health-bg: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  --sidebar-health-border: rgba(255, 244, 221, 0.1);
 
   --glass-border: color-mix(in srgb, var(--border-color) 55%, transparent);
 }

@@ -1349,7 +1349,10 @@
   },
   "sidebar": {
     "toggle_expand": "Развернуть боковую панель",
-    "toggle_collapse": "Свернуть боковую панель"
+    "toggle_collapse": "Свернуть боковую панель",
+    "brand_subtitle": "Центр управления API",
+    "system_status": "Состояние системы",
+    "system_ok": "Все системы работают нормально"
   },
   "footer": {
     "api_version": "Версия CLI Proxy API",

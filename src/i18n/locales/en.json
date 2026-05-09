@@ -1352,7 +1352,10 @@
   },
   "sidebar": {
     "toggle_expand": "Expand sidebar",
-    "toggle_collapse": "Collapse sidebar"
+    "toggle_collapse": "Collapse sidebar",
+    "brand_subtitle": "API Management Center",
+    "system_status": "System Status",
+    "system_ok": "All systems operational"
   },
   "footer": {
     "api_version": "CLI Proxy API Version",

@@ -5,6 +5,8 @@ $openai-toolbar-control-height: 36px;
 
 .container {
   width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
 }
 
 .cardTitle {
@@ -19,16 +21,19 @@ $openai-toolbar-control-height: 36px;
 }
 
 .pageTitle {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 820;
+  line-height: 1.16;
   color: var(--text-primary);
-  margin: 0 0 $spacing-xl 0;
+  margin: 0 0 16px 0;
+  padding-bottom: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
 }
 
 .content {
   display: flex;
   flex-direction: column;
-  gap: $spacing-xl;
+  gap: 18px;
   padding-bottom: calc(
     var(--provider-nav-height, 60px) + 12px + env(safe-area-inset-bottom) + #{$spacing-md}
   );
@@ -48,8 +53,8 @@ $openai-toolbar-control-height: 36px;
 
   h3 {
     margin: 0;
-    font-size: 20px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 760;
     color: var(--text-primary);
   }
 }
@@ -65,10 +70,14 @@ $openai-toolbar-control-height: 36px;
 }
 
 .openaiProviderCard {
-  border: 1px solid var(--border-color);
-  border-radius: $radius-md;
-  padding: $spacing-md;
-  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 8px;
+  padding: 14px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 96%, transparent),
+    color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary))
+  );
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -113,8 +122,8 @@ $openai-toolbar-control-height: 36px;
     height: $openai-toolbar-control-height;
     padding: 0 12px;
     border-color: var(--border-primary);
-    border-radius: 6px;
-    background: var(--bg-secondary);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
     box-shadow: none;
     font-size: 13px;
   }
@@ -127,8 +136,8 @@ $openai-toolbar-control-height: 36px;
   height: $openai-toolbar-control-height;
   padding: 0 10px;
   border-color: var(--border-primary);
-  border-radius: 6px;
-  background: var(--bg-secondary);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
   color: var(--text-primary);
   gap: 6px;
 
@@ -178,8 +187,8 @@ $openai-toolbar-control-height: 36px;
 .openaiFloatingToolbar {
   position: fixed;
   z-index: 20;
-  background: var(--bg-primary);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+  box-shadow: 0 12px 30px rgb(45 38 28 / 0.08);
   overflow: visible;
   padding: 0;
 }
@@ -201,8 +210,8 @@ $openai-toolbar-control-height: 36px;
   width: 164px;
   height: $openai-toolbar-control-height;
   border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  background: var(--bg-secondary);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
   overflow: hidden;
   transition:
     background-color $transition-fast,
@@ -625,8 +634,8 @@ $openai-toolbar-control-height: 36px;
   min-width: 0;
   max-width: 100%;
   padding: 8px 12px;
-  background: var(--bg-secondary, #f9fafb);
-  border: 1px solid var(--border-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--border-secondary) 84%, transparent);
   border-radius: 8px;
   font-size: 12px;
 }
@@ -1225,7 +1234,7 @@ $openai-toolbar-control-height: 36px;
 
 .keyTableShell {
   overflow-x: auto;
-  border-radius: $radius-md;
+  border-radius: 8px;
 }
 
 // 表头
@@ -1235,10 +1244,10 @@ $openai-toolbar-control-height: 36px;
   gap: $spacing-sm;
   min-width: 760px;
   padding: 10px $spacing-md;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
   border-bottom: none;
-  border-radius: $radius-md $radius-md 0 0;
+  border-radius: 8px 8px 0 0;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1254,8 +1263,8 @@ $openai-toolbar-control-height: 36px;
   gap: $spacing-sm;
   min-width: 760px;
   padding: 10px $spacing-md;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-secondary) 74%, var(--bg-primary));
+  border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
   border-top: none;
   align-items: center;
 

@@ -3,10 +3,10 @@
 :root {
   --header-height: 80px;
   --shell-gutter: 24px;
-  --sidebar-panel-width: 240px;
+  --sidebar-panel-width: 224px;
   --sidebar-collapsed-width: 68px;
   --sidebar-active-width: var(--sidebar-panel-width);
-  --sidebar-gap: 32px;
+  --sidebar-gap: 28px;
   --floating-control-size: 38px;
 }
 
@@ -19,7 +19,9 @@
   min-height: 100vh;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--bg-secondary), var(--bg-quinary, var(--bg-secondary)));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--bg-secondary) 88%, #fff6df) 0%, var(--bg-secondary) 42%),
+    linear-gradient(180deg, var(--bg-secondary), var(--bg-quinary, var(--bg-secondary)));
   color: var(--text-primary);
 
   &.sidebar-is-collapsed {
@@ -49,7 +51,7 @@
     color-mix(in srgb, var(--bg-secondary) 22%, transparent) 66%,
     transparent 100%
   );
-  --glass-blur: 22px;
+  --glass-blur: 18px;
   backdrop-filter: var(--glass-backdrop-filter);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
   mask-image: linear-gradient(
@@ -85,16 +87,16 @@
     position: absolute;
     top: var(--shell-gutter);
     left: calc(var(--shell-gutter) + var(--sidebar-active-width) + 22px);
-    width: 44px;
-    height: 44px;
+    width: 38px;
+    height: 38px;
     padding: 0;
     border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-    border-radius: 12px;
-    background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bg-primary) 78%, transparent);
     color: var(--text-secondary);
     box-shadow:
-      0 16px 38px rgb(0 0 0 / 0.16),
-      inset 0 1px 0 rgb(255 255 255 / 0.04);
+      0 12px 28px rgb(43 34 22 / 0.12),
+      inset 0 1px 0 rgb(255 255 255 / 0.18);
     --glass-blur: 14px;
     backdrop-filter: var(--glass-backdrop-filter);
     -webkit-backdrop-filter: var(--glass-backdrop-filter);
@@ -138,12 +140,12 @@
     gap: 4px;
     padding: 6px;
     border: 1px solid color-mix(in srgb, var(--border-color) 68%, transparent);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--bg-primary) 68%, transparent);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
     color: var(--text-secondary);
     box-shadow:
-      0 18px 44px rgb(0 0 0 / 0.17),
-      inset 0 1px 0 rgb(255 255 255 / 0.04);
+      0 12px 30px rgb(43 34 22 / 0.13),
+      inset 0 1px 0 rgb(255 255 255 / 0.18);
     --glass-blur: 16px;
     backdrop-filter: var(--glass-backdrop-filter);
     -webkit-backdrop-filter: var(--glass-backdrop-filter);
@@ -385,23 +387,16 @@
   z-index: $z-dropdown - 1;
   width: var(--sidebar-panel-width);
   height: calc(100vh - var(--shell-gutter) - var(--shell-gutter));
-  padding: 18px 14px;
+  padding: 14px 8px 16px;
   display: flex;
   flex-direction: column;
-  gap: $spacing-md;
+  gap: 14px;
   flex-shrink: 0;
   overflow-y: auto;
-  background:
-    linear-gradient(90deg, rgb(255 255 255 / 0.46), rgb(255 255 255 / 0) 44%),
-    var(--sidebar-surface, color-mix(in srgb, var(--bg-primary) 72%, transparent));
-  border: 1px solid var(--sidebar-surface-border, color-mix(in srgb, var(--border-color) 72%, transparent));
-  border-radius: 18px;
-  box-shadow:
-    0 28px 70px rgb(67 55 38 / 0.08),
-    inset 0 1px 0 rgb(255 255 255 / 0.44);
-  --glass-blur: 18px;
-  backdrop-filter: var(--glass-backdrop-filter);
-  -webkit-backdrop-filter: var(--glass-backdrop-filter);
+  background: var(--sidebar-surface, transparent);
+  border: 1px solid var(--sidebar-surface-border, transparent);
+  border-radius: 0;
+  box-shadow: none;
   scrollbar-width: none;
   transition:
     width $transition-normal,
@@ -418,7 +413,7 @@
 
   &.collapsed {
     width: var(--sidebar-collapsed-width);
-    padding: 18px 10px;
+    padding: 14px 6px 16px;
 
     .sidebar-brand {
       justify-content: center;
@@ -428,52 +423,72 @@
 
     .nav-item {
       justify-content: center;
-      padding: 10px;
+      padding: 11px;
     }
   }
 
   .sidebar-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 42px;
-    padding: 0 10px 12px;
-    color: var(--text-primary);
+    gap: 11px;
+    min-height: 50px;
+    padding: 0 8px 16px;
+    color: var(--sidebar-text, var(--text-primary));
     flex-shrink: 0;
   }
 
   .sidebar-brand-logo {
-    width: 34px;
-    height: 34px;
+    width: 36px;
+    height: 36px;
     object-fit: contain;
     border-radius: 8px;
     box-shadow: none;
     flex-shrink: 0;
   }
 
+  .sidebar-brand-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .sidebar-brand-title {
     min-width: 0;
     overflow: hidden;
-    color: var(--text-primary);
+    color: var(--sidebar-text, var(--text-primary));
     font-size: 18px;
     font-weight: 800;
+    line-height: 1.1;
     letter-spacing: 0;
     white-space: nowrap;
+  }
+
+  .sidebar-brand-subtitle {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--sidebar-subtle, var(--text-tertiary));
+    font-size: 12px;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .nav-section {
     display: flex;
     flex-direction: column;
-    gap: $spacing-sm;
+    gap: 4px;
     flex: 1;
   }
 
   .nav-item {
-    padding: 10px 12px;
-    border-radius: 11px;
+    min-height: 40px;
+    padding: 9px 12px;
+    border-radius: 8px;
     border: 1px solid transparent;
-    color: var(--text-primary);
-    font-weight: 650;
+    color: var(--sidebar-muted, var(--text-primary));
+    font-size: 14px;
+    font-weight: 680;
     text-decoration: none;
     display: flex;
     align-items: center;
@@ -486,19 +501,17 @@
       transform $transition-fast;
 
     .nav-icon {
-      width: 28px;
-      height: 28px;
+      width: 22px;
+      height: 22px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
       color: currentColor;
       opacity: 0.96;
-      border-radius: 8px;
-      background:
-        linear-gradient(180deg, rgb(255 255 255 / 0.12), rgb(255 255 255 / 0)),
-        color-mix(in srgb, var(--bg-secondary) 84%, transparent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-primary) 82%, transparent);
+      border-radius: 6px;
+      background: var(--sidebar-icon-bg, color-mix(in srgb, var(--bg-secondary) 84%, transparent));
+      box-shadow: none;
       transition:
         background $transition-fast,
         box-shadow $transition-fast,
@@ -519,34 +532,98 @@
     }
 
     &:hover {
-      background: color-mix(in srgb, var(--text-primary) 7%, transparent);
-      border-color: color-mix(in srgb, var(--border-color) 58%, transparent);
+      background: color-mix(in srgb, var(--sidebar-active-bg) 52%, transparent);
+      border-color: color-mix(in srgb, var(--sidebar-active-bg) 74%, transparent);
+      color: var(--sidebar-text, var(--text-primary));
       transform: translateX(1px);
 
       .nav-icon {
-        background:
-          linear-gradient(180deg, rgb(255 255 255 / 0.16), rgb(255 255 255 / 0)),
-          color-mix(in srgb, var(--bg-primary) 88%, transparent);
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-hover) 86%, transparent);
+        background: transparent;
+        box-shadow: none;
       }
     }
 
     &.active {
       background: var(--sidebar-active-bg, color-mix(in srgb, var(--text-primary) 10%, transparent));
-      color: var(--text-primary);
-      border-color: color-mix(in srgb, var(--border-hover) 70%, transparent);
-      box-shadow:
-        var(--sidebar-active-shadow, inset 0 1px 0 rgb(255 255 255 / 0.04)),
-        inset 0 1px 0 rgb(255 255 255 / 0.08);
+      color: var(--sidebar-active-text, var(--text-primary));
+      border-color: color-mix(in srgb, var(--sidebar-active-bg) 72%, transparent);
+      box-shadow: var(--sidebar-active-shadow, inset 4px 0 0 var(--primary-active));
 
       .nav-icon {
-        color: var(--primary-active);
-        background:
-          linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0)),
-          color-mix(in srgb, var(--primary-color) 14%, var(--bg-primary));
-        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 24%, transparent);
+        color: var(--sidebar-active-text, var(--primary-active));
+        background: transparent;
+        box-shadow: none;
       }
     }
+  }
+
+  .sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 8px;
+    color: var(--sidebar-subtle, var(--text-tertiary));
+    flex-shrink: 0;
+  }
+
+  .sidebar-health {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--sidebar-health-border, var(--border-color));
+    border-radius: 8px;
+    background: var(--sidebar-health-bg, var(--bg-primary));
+    box-shadow: 0 10px 24px rgb(66 52 34 / 0.06);
+  }
+
+  .sidebar-health-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--text-tertiary);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-tertiary) 12%, transparent);
+    flex-shrink: 0;
+  }
+
+  .sidebar-health-connected .sidebar-health-dot {
+    background: #6bc98f;
+    box-shadow: 0 0 0 4px rgba(107, 201, 143, 0.15);
+  }
+
+  .sidebar-health-error .sidebar-health-dot {
+    background: var(--error-color);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--error-color) 14%, transparent);
+  }
+
+  .sidebar-health-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sidebar-health-title {
+    color: var(--sidebar-text, var(--text-primary));
+    font-size: 13px;
+    font-weight: 760;
+    line-height: 1.2;
+  }
+
+  .sidebar-health-text {
+    color: color-mix(in srgb, var(--success-color) 72%, var(--sidebar-muted));
+    font-size: 12px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-version {
+    padding: 0 8px 2px;
+    color: var(--sidebar-subtle, var(--text-tertiary));
+    font-size: 12px;
+    line-height: 1.3;
   }
 }
 
@@ -571,7 +648,7 @@
 .main-content {
   flex: 1 0 auto;
   min-height: 100%;
-  padding: 70px clamp(20px, 3vw, 48px) 40px;
+  padding: 62px clamp(18px, 2.8vw, 42px) 36px;
   display: flex;
   flex-direction: column;
   gap: $spacing-lg;
@@ -696,11 +773,10 @@
     width: var(--sidebar-panel-width);
     height: auto;
     transform: translateX(calc(-100% - 24px));
-    background:
-      linear-gradient(180deg, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0)),
-      color-mix(in srgb, var(--bg-primary) 94%, #0f0e0c);
+    background: color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-primary));
     border-color: color-mix(in srgb, var(--border-color) 88%, transparent);
-    box-shadow: none;
+    border-radius: 14px;
+    box-shadow: 0 24px 56px rgb(38 29 17 / 0.18);
 
     &.open {
       transform: translateX(0);

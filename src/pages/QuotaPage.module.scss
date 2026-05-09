@@ -2,20 +2,26 @@
 @use '../styles/mixins' as *;
 
 .container {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
 }
 
 .pageHeader {
   display: flex;
   flex-direction: column;
-  gap: $spacing-sm;
+  gap: 6px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
 }
 
 .pageTitle {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 820;
+  line-height: 1.16;
   color: var(--text-primary);
   margin: 0;
 }
@@ -158,7 +164,7 @@
   gap: $spacing-xs;
   align-items: center;
   padding: 3px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-color) 88%, transparent);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
@@ -171,7 +177,7 @@
 
 .viewModeButton:global(.btn.btn-sm) {
   padding: 8px 14px;
-  border-radius: 999px;
+  border-radius: 7px;
   border-color: transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -207,7 +213,7 @@
 
 .refreshAllButton:global(.btn.btn-sm) {
   padding-inline: 14px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--primary-color) 22%, var(--border-color));
   color: var(--text-primary);
@@ -592,9 +598,13 @@
 }
 
 .fileCard {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: $radius-lg;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 96%, transparent),
+    color-mix(in srgb, var(--bg-primary) 88%, var(--bg-secondary))
+  );
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 8px;
   padding: $spacing-md;
   display: flex;
   flex-direction: column;
@@ -602,9 +612,9 @@
   transition: transform $transition-fast, box-shadow $transition-fast, border-color $transition-fast;
 
   &:hover {
-    transform: translateY(-2px);
-    box-shadow: $shadow-md;
-    border-color: rgba(37, 99, 235, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 30px rgb(45 38 28 / 0.08);
+    border-color: color-mix(in srgb, var(--primary-color) 24%, var(--border-color));
   }
 }
 

@@ -23,7 +23,7 @@
   flex-direction: column;
   gap: $spacing-xs;
   padding: $spacing-md $spacing-lg;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
 
   @include mobile {
     padding-left: $spacing-md;
@@ -109,9 +109,9 @@
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: $radius-full;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  background-color: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;

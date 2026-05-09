@@ -6,7 +6,9 @@
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: 18px;
+  max-width: 1180px;
+  margin: 0 auto;
   overflow-y: auto;
   padding-bottom: calc(
     var(--config-action-bar-height, 0px) + 16px + env(safe-area-inset-bottom) + #{$spacing-md}
@@ -14,41 +16,12 @@
 }
 
 .pageHeader {
-  position: relative;
-  overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) auto;
-  gap: 24px;
-  align-items: end;
-  padding: clamp(22px, 3vw, 30px);
-  border-radius: 30px;
-  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-  background:
-    radial-gradient(
-      circle at top right,
-      color-mix(in srgb, var(--primary-color) 14%, transparent),
-      transparent 34%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--bg-primary) 94%, transparent),
-      color-mix(in srgb, var(--bg-secondary) 96%, transparent)
-    );
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0 auto auto 0;
-    width: min(260px, 48vw);
-    height: min(260px, 48vw);
-    background: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--primary-color) 12%, transparent),
-      transparent 70%
-    );
-    pointer-events: none;
-    opacity: 0.7;
-  }
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 0 0 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
 
   @include mobile {
     grid-template-columns: minmax(0, 1fr);
@@ -58,35 +31,35 @@
 }
 
 .pageHeaderCopy {
-  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   min-width: 0;
 }
 
 .pageEyebrow {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .pageTitle {
   margin: 0;
   color: var(--text-primary);
-  font-size: clamp(32px, 4vw, 52px);
-  line-height: 0.95;
-  letter-spacing: -0.04em;
+  font-size: 30px;
+  font-weight: 820;
+  line-height: 1.16;
+  letter-spacing: 0;
 }
 
 .description {
   margin: 0;
   max-width: 46rem;
   color: var(--text-secondary);
-  font-size: 15px;
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .pageMeta {
@@ -108,7 +81,7 @@
   justify-content: center;
   min-height: 38px;
   padding: 0 14px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
   color: var(--text-primary);
@@ -126,8 +99,8 @@
   align-items: center;
   gap: 4px;
   padding: 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--bg-primary));
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   width: fit-content;
   max-width: 100%;
@@ -145,8 +118,8 @@
 
 .tabItem {
   @include button-reset;
-  padding: 10px 16px;
-  border-radius: 999px;
+  padding: 9px 14px;
+  border-radius: 7px;
   border: 1px solid transparent;
   color: var(--text-secondary);
   font-size: 14px;
@@ -186,16 +159,16 @@
 .workspaceShell {
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
-  padding: clamp(18px, 3vw, 28px);
-  border-radius: 32px;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
-  background: color-mix(in srgb, var(--bg-primary) 74%, transparent);
-  box-shadow: var(--shadow);
+  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
+  box-shadow: 0 10px 28px rgb(45 38 28 / 0.06);
 
   @include mobile {
-    padding: 16px;
-    border-radius: 28px;
+    padding: 14px;
+    border-radius: 8px;
   }
 }
 
@@ -241,7 +214,7 @@
 
 .searchInput {
   flex: 1;
-  border-radius: 16px !important;
+  border-radius: 8px !important;
   padding-right: 132px !important;
 }
 
@@ -256,7 +229,7 @@
   align-items: center;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
   color: var(--text-secondary);
@@ -273,7 +246,7 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--primary-color);
   border: 1px solid var(--primary-color);
   color: #fff;
@@ -303,7 +276,7 @@
     width: 36px;
     height: 36px;
     padding: 0 !important;
-    border-radius: 999px;
+    border-radius: 8px;
   }
 
   @include mobile {
@@ -321,7 +294,7 @@
   flex: 0 0 auto;
   height: clamp(420px, 64vh, 980px);
   border: 1px solid color-mix(in srgb, var(--border-color) 84%, transparent);
-  border-radius: 28px;
+  border-radius: 8px;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
 
@@ -423,12 +396,12 @@
   gap: 8px;
   padding: 8px 10px;
   --glass-blur: 12px;
-  background: var(--glass-bg);
+  background: color-mix(in srgb, var(--bg-primary) 90%, transparent);
   backdrop-filter: var(--glass-backdrop-filter);
   -webkit-backdrop-filter: var(--glass-backdrop-filter);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  box-shadow: var(--shadow-lg);
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgb(45 38 28 / 0.12);
   max-width: inherit;
   overflow-x: auto;
   scrollbar-width: none;
@@ -444,7 +417,7 @@
   min-width: 0;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-primary);
@@ -471,7 +444,7 @@
   justify-content: center;
   width: 40px;
   height: 40px;
-  border-radius: 999px;
+  border-radius: 8px;
   cursor: pointer;
   color: var(--text-primary);
   transition:
@@ -480,11 +453,11 @@
 
   &:hover:not(:disabled) {
     background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-    transform: scale(1.08);
+    transform: translateY(-1px);
   }
 
   &:active:not(:disabled) {
-    transform: scale(0.95);
+    transform: translateY(0);
   }
 
   &:disabled {

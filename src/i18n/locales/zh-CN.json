@@ -1352,7 +1352,10 @@
   },
   "sidebar": {
     "toggle_expand": "展开侧边栏",
-    "toggle_collapse": "收起侧边栏"
+    "toggle_collapse": "收起侧边栏",
+    "brand_subtitle": "API 管理中心",
+    "system_status": "系统状态",
+    "system_ok": "全部系统运行正常"
   },
   "footer": {
     "api_version": "CLI Proxy API 版本",

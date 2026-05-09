@@ -16,7 +16,6 @@ import { configApi, versionApi } from '@/services/api';
 import { apiKeysApi } from '@/services/api/apiKeys';
 import { classifyModels } from '@/utils/models';
 import { STORAGE_KEY_AUTH } from '@/utils/constants';
-import { INLINE_LOGO_JPEG } from '@/assets/logoInline';
 import iconGemini from '@/assets/icons/gemini.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconOpenaiLight from '@/assets/icons/openai-light.svg';
@@ -41,6 +40,19 @@ const MODEL_CATEGORY_ICONS: Record<string, string | { light: string; dark: strin
   deepseek: iconDeepseek,
   minimax: iconMinimax,
 };
+
+function SystemBrandLogo() {
+  return (
+    <svg className={styles.aboutLogo} viewBox="0 0 40 40" role="img" aria-label="CLI Proxy">
+      <path d="M20 2.8 34.7 11.4v17.2L20 37.2 5.3 28.6V11.4L20 2.8Z" fill="#5b3c28" />
+      <path d="M20 7.8 30.1 13.7v12.6L20 32.2 9.9 26.3V13.7L20 7.8Z" fill="#f6ead7" />
+      <path d="M20 10.4 27.6 14.8 20 19.2 12.4 14.8 20 10.4Z" fill="#b98b5e" />
+      <path d="M12.4 16.6 19 20.4v7.8l-6.6-3.8v-7.8Z" fill="#8a6041" />
+      <path d="M27.6 16.6 21 20.4v7.8l6.6-3.8v-7.8Z" fill="#d3aa78" />
+      <path d="M20 19.2v9" stroke="#5b3c28" strokeWidth="1.4" strokeLinecap="round" opacity="0.65" />
+    </svg>
+  );
+}
 
 const parseVersionSegments = (version?: string | null) => {
   if (!version) return null;
@@ -345,7 +357,7 @@ export function SystemPage() {
       <div className={styles.content}>
         <Card className={styles.aboutCard}>
           <div className={styles.aboutHeader}>
-            <img src={INLINE_LOGO_JPEG} alt="CPAMC" className={styles.aboutLogo} />
+            <SystemBrandLogo />
             <div className={styles.aboutTitle}>{t('system_info.about_title')}</div>
           </div>
 

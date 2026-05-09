@@ -278,17 +278,7 @@ export function DashboardPage() {
 
   return (
     <div className={styles.dashboard}>
-      {/* Decorative background orbs */}
-      <div className={styles.backgroundOrbs} aria-hidden="true">
-        <div className={styles.orb1} />
-        <div className={styles.orb2} />
-      </div>
-
-      {/* Hero welcome section */}
       <section className={styles.hero}>
-        <span className={styles.heroWatermark} aria-hidden="true">
-          OVERVIEW
-        </span>
         <div className={styles.heroContent}>
           <span className={styles.heroGreeting}>{t(greetingKey)}</span>
           <h1 className={styles.heroTitle}>{t('dashboard.welcome_back')}</h1>
@@ -329,7 +319,6 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {/* Bento stats grid */}
       <section className={styles.statsSection}>
         <h2 className={styles.sectionHeading}>{t('dashboard.system_overview')}</h2>
         <div className={styles.bentoGrid}>
@@ -337,7 +326,7 @@ export function DashboardPage() {
             <Link
               key={stat.path}
               to={stat.path}
-              className={`${styles.bentoCard} ${index === 0 ? styles.bentoLarge : ''}`}
+              className={styles.bentoCard}
               style={{ animationDelay: `${index * 80}ms` }}
             >
               <div className={styles.bentoIcon}>{stat.icon}</div>
@@ -355,7 +344,6 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {/* Config pills section */}
       {config && (
         <section className={styles.configSection}>
           <h2 className={styles.sectionHeading}>{t('dashboard.current_config')}</h2>

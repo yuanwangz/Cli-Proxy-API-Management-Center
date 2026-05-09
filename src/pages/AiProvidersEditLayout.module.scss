@@ -51,9 +51,9 @@
 }
 
 .ampcodeUpstreamMappingCard {
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  background: var(--bg-secondary);
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-primary));
   padding: 12px;
   display: flex;
   flex-direction: column;
