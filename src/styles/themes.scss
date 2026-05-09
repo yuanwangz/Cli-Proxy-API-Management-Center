@@ -58,6 +58,10 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
+  --sidebar-surface: linear-gradient(180deg, #fffaf0 0%, #f1ebdf 100%);
+  --sidebar-surface-border: #e5dccd;
+  --sidebar-active-bg: rgba(111, 92, 67, 0.12);
+  --sidebar-active-shadow: inset 3px 0 0 #7c6b55;
 
   // Glass effect (blurred surfaces)
   --glass-blur: 12px;
@@ -123,6 +127,10 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
+  --sidebar-surface: linear-gradient(180deg, #ffffff 0%, #f7f4ed 100%);
+  --sidebar-surface-border: #e7e1d8;
+  --sidebar-active-bg: rgba(111, 92, 67, 0.1);
+  --sidebar-active-shadow: inset 3px 0 0 #7c6b55;
 }
 
 // 深色主题（#191919）
@@ -181,6 +189,10 @@
 
   --radius-md: 8px;
   --accent-tertiary: var(--bg-tertiary);
+  --sidebar-surface: linear-gradient(180deg, #211f1b 0%, #181613 100%);
+  --sidebar-surface-border: #3f3932;
+  --sidebar-active-bg: rgba(255, 244, 220, 0.1);
+  --sidebar-active-shadow: inset 3px 0 0 #b8a37a;
 
   --glass-border: color-mix(in srgb, var(--border-color) 55%, transparent);
 }
