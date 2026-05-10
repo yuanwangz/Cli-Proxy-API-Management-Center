@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -327,27 +327,72 @@ function CredentialChip({
   authIndex?: string;
   apiKey?: string;
 }) {
+  const id = useId();
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
   const fullValue = fullLabel?.trim();
-  const maskedFullValue = fullValue ? maskCredential(fullValue) : '';
-  const hasDetails = Boolean(maskedFullValue || authIndex || apiKey);
+  const hasDetails = Boolean(fullValue || authIndex || apiKey);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    const handlePopoverOpen = (event: Event) => {
+      const nextID = (event as CustomEvent<string>).detail;
+      if (nextID !== id) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('usage-credential-popover-open', handlePopoverOpen);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('usage-credential-popover-open', handlePopoverOpen);
+    };
+  }, [id, open]);
+
+  const toggleOpen = () => {
+    if (!hasDetails) return;
+    setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        window.dispatchEvent(new CustomEvent('usage-credential-popover-open', { detail: id }));
+      }
+      return nextOpen;
+    });
+  };
 
   return (
-    <span className={styles.credentialCell}>
+    <span ref={rootRef} className={styles.credentialCell}>
       <button
         type="button"
         className={styles.credentialButton}
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggleOpen}
         disabled={!hasDetails}
+        aria-expanded={open}
       >
         {label}
       </button>
       {open && hasDetails && (
         <span className={styles.credentialPopover} role="dialog">
-          <span>
-            <em>凭证脱敏值</em>
-            <strong>{maskedFullValue || label || '后端未提供凭证值'}</strong>
-          </span>
+          {fullValue && (
+            <span>
+              <em>凭证完整值</em>
+              <strong>{fullValue}</strong>
+            </span>
+          )}
           {authIndex && (
             <span>
               <em>凭证索引</em>
