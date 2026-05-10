@@ -609,7 +609,7 @@ export const buildUsageAnalytics = (
             minute: '2-digit',
           })
         : '-',
-      status: event.statusCode ? String(event.statusCode) : event.failed ? '失败' : '200',
+      status: event.statusCode ? String(event.statusCode) : event.failed ? '未知' : '200',
       provider: event.provider,
       model: event.model,
       endpoint: event.path || event.endpoint,
