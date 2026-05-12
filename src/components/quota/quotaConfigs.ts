@@ -61,6 +61,7 @@ import {
   resolveGeminiCliProjectId,
   formatCodexResetLabel,
   formatQuotaResetTime,
+  formatQuotaResetTimeFull,
   formatKimiResetHint,
   buildAntigravityQuotaGroups,
   buildGeminiCliQuotaBuckets,
@@ -86,6 +87,7 @@ type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi';
 const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
+const INLINE_QUOTA_ITEM_LIMIT = 3;
 const geminiCliSupplementaryRequestIds = new Map<string, number>();
 const geminiCliSupplementaryCache = new Map<
   string,
@@ -123,6 +125,131 @@ export interface QuotaConfig<TState, TData> {
   gridClassName: string;
   renderQuotaItems: (quota: TState, t: TFunction, helpers: QuotaRenderHelpers) => ReactNode;
 }
+
+type QuotaPopoverItem = {
+  label: string;
+  percentLabel?: string;
+  amountLabel?: string | null;
+  resetLabel?: string | null;
+  title?: string;
+};
+
+function QuotaOverflowPopover({
+  count,
+  items,
+  t,
+  styleMap,
+}: {
+  count: number;
+  items: QuotaPopoverItem[];
+  t: TFunction;
+  styleMap: typeof styles;
+}) {
+  const id = React.useId();
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const [open, setOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    const handlePopoverOpen = (event: Event) => {
+      const nextId = (event as CustomEvent<string>).detail;
+      if (nextId !== id) setOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('quota-overflow-popover-open', handlePopoverOpen);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('quota-overflow-popover-open', handlePopoverOpen);
+    };
+  }, [id, open]);
+
+  const toggleOpen = () => {
+    setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        window.dispatchEvent(new CustomEvent('quota-overflow-popover-open', { detail: id }));
+      }
+      return nextOpen;
+    });
+  };
+
+  return React.createElement(
+    'div',
+    { ref: rootRef, className: styleMap.quotaOverflowAnchor },
+    React.createElement(
+      'button',
+      {
+        type: 'button',
+        className: styleMap.quotaOverflow,
+        onClick: toggleOpen,
+        'aria-expanded': open,
+        title: t('quota_management.more_quota_items_title', { count }),
+      },
+      t('quota_management.more_quota_items', { count })
+    ),
+    open
+      ? React.createElement(
+          'div',
+          { className: styleMap.quotaOverflowPopover, role: 'dialog' },
+          React.createElement(
+            'div',
+            { className: styleMap.quotaOverflowTitle },
+            t('quota_management.quota_popover_title')
+          ),
+          ...items.map((item, index) =>
+            React.createElement(
+              'div',
+              {
+                key: `${item.label}-${index}`,
+                className: styleMap.quotaOverflowItem,
+                title: item.title,
+              },
+              React.createElement('strong', null, item.label),
+              React.createElement(
+                'span',
+                null,
+                item.percentLabel || '--',
+                item.amountLabel ? ` · ${item.amountLabel}` : '',
+                item.resetLabel && item.resetLabel !== '-' ? ` · ${item.resetLabel}` : ''
+              )
+            )
+          )
+        )
+      : null
+  );
+}
+
+const quotaOverflowNode = (
+  hiddenCount: number,
+  items: QuotaPopoverItem[],
+  t: TFunction,
+  helpers: QuotaRenderHelpers,
+  key = 'quota-overflow'
+): ReactNode => {
+  if (hiddenCount <= 0) return null;
+  return React.createElement(
+    QuotaOverflowPopover,
+    {
+      key,
+      count: hiddenCount,
+      items,
+      t,
+      styleMap: helpers.styles,
+    }
+  );
+};
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
   try {
@@ -720,7 +847,23 @@ const renderAntigravityItems = (
     return h('div', { className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'));
   }
 
-  return groups.map((group) => {
+  const visibleGroups = groups.slice(0, INLINE_QUOTA_ITEM_LIMIT);
+  const hiddenGroups = groups.slice(INLINE_QUOTA_ITEM_LIMIT);
+  const popoverItems = groups.map((group) => {
+    const remainingFraction =
+      typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
+    const clamped =
+      remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
+    const percent = clamped === null ? null : Math.round(clamped * 100);
+    const percentLabel = percent === null ? '--' : `${percent}%`;
+    return {
+      label: group.label,
+      percentLabel,
+      resetLabel: formatQuotaResetTimeFull(group.resetTime),
+      title: group.models.join(', '),
+    };
+  });
+  const nodes: ReactNode[] = visibleGroups.map((group) => {
     const remainingFraction =
       typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
     const clamped =
@@ -731,7 +874,10 @@ const renderAntigravityItems = (
 
     return h(
       'div',
-      { key: group.id, className: styleMap.quotaRow },
+      {
+        key: group.id,
+        className: `${styleMap.quotaRow} ${groups.length > 1 ? styleMap.quotaRowCondensed : ''}`,
+      },
       h(
         'div',
         { className: styleMap.quotaRowHeader },
@@ -750,6 +896,15 @@ const renderAntigravityItems = (
       })
     );
   });
+
+  nodes.push(quotaOverflowNode(
+    hiddenGroups.length,
+    popoverItems,
+    t,
+    helpers
+  ));
+
+  return nodes;
 };
 
 const renderCodexItems = (
@@ -771,7 +926,23 @@ const renderCodexItems = (
     );
   }
 
-  return windows.map((window) => {
+  const visibleWindows = windows.slice(0, INLINE_QUOTA_ITEM_LIMIT);
+  const hiddenWindows = windows.slice(INLINE_QUOTA_ITEM_LIMIT);
+  const popoverItems = windows.map((window) => {
+    const used = typeof window.usedPercent === 'number' ? window.usedPercent : null;
+    const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
+    const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+    const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
+    const label = window.labelKey
+      ? t(window.labelKey, window.labelParams as Record<string, string | number>)
+      : window.label;
+    const resetLabel =
+      typeof window.resetAt === 'number' && window.resetAt > 0
+        ? formatCodexResetLabel({ reset_at: window.resetAt })
+        : window.resetLabel;
+    return { label, percentLabel, resetLabel };
+  });
+  const nodes: ReactNode[] = visibleWindows.map((window) => {
       const used = typeof window.usedPercent === 'number' ? window.usedPercent : null;
       const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
       const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
@@ -786,7 +957,10 @@ const renderCodexItems = (
 
       return h(
         'div',
-        { key: window.id, className: styleMap.quotaRow },
+        {
+          key: window.id,
+          className: `${styleMap.quotaRow} ${windows.length > 1 ? styleMap.quotaRowCondensed : ''}`,
+        },
         h(
           'div',
           { className: styleMap.quotaRowHeader },
@@ -805,6 +979,15 @@ const renderCodexItems = (
         })
       );
     });
+
+  nodes.push(quotaOverflowNode(
+    hiddenWindows.length,
+    popoverItems,
+    t,
+    helpers
+  ));
+
+  return nodes;
 };
 
 const renderGeminiCliItems = (
@@ -840,8 +1023,35 @@ const renderGeminiCliItems = (
     return h(Fragment, null, ...nodes);
   }
 
+  const bucketSlots = Math.max(1, INLINE_QUOTA_ITEM_LIMIT - nodes.length);
+  const visibleBuckets = buckets.slice(0, bucketSlots);
+  const hiddenBuckets = buckets.slice(bucketSlots);
+  const popoverItems = buckets.map((bucket) => {
+    const fraction =
+      typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
+    const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
+    const percent = clamped === null ? null : Math.round(clamped * 100);
+    const percentLabel = percent === null ? '--' : `${percent}%`;
+    const amountLabel =
+      bucket.remainingAmount === null || bucket.remainingAmount === undefined
+        ? null
+        : t('gemini_cli_quota.remaining_amount', {
+            count: bucket.remainingAmount,
+          });
+    const titleBase =
+      bucket.modelIds && bucket.modelIds.length > 0 ? bucket.modelIds.join(', ') : bucket.label;
+    const title = bucket.tokenType ? `${titleBase} (${bucket.tokenType})` : titleBase;
+    return {
+      label: bucket.label,
+      percentLabel,
+      amountLabel,
+      resetLabel: formatQuotaResetTimeFull(bucket.resetTime),
+      title,
+    };
+  });
+
   nodes.push(
-    ...buckets.map((bucket) => {
+    ...visibleBuckets.map((bucket) => {
       const fraction =
         typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
       const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
@@ -861,7 +1071,10 @@ const renderGeminiCliItems = (
 
       return h(
         'div',
-        { key: bucket.id, className: styleMap.quotaRow },
+        {
+          key: bucket.id,
+          className: `${styleMap.quotaRow} ${buckets.length > 1 ? styleMap.quotaRowCondensed : ''}`,
+        },
         h(
           'div',
           { className: styleMap.quotaRowHeader },
@@ -883,6 +1096,15 @@ const renderGeminiCliItems = (
         })
       );
     })
+  );
+
+  nodes.push(
+    quotaOverflowNode(
+      hiddenBuckets.length,
+      popoverItems,
+      t,
+      helpers
+    )
   );
 
   return h(Fragment, null, ...nodes);
@@ -1045,8 +1267,20 @@ const renderClaudeItems = (
     return h(Fragment, null, ...nodes);
   }
 
+  const windowSlots = Math.max(1, INLINE_QUOTA_ITEM_LIMIT - nodes.length);
+  const visibleWindows = windows.slice(0, windowSlots);
+  const hiddenWindows = windows.slice(windowSlots);
+  const popoverItems = windows.map((window) => {
+    const used = window.usedPercent;
+    const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
+    const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
+    const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
+    const label = window.labelKey ? t(window.labelKey) : window.label;
+    return { label, percentLabel, resetLabel: window.resetLabel };
+  });
+
   nodes.push(
-    ...windows.map((window) => {
+    ...visibleWindows.map((window) => {
       const used = window.usedPercent;
       const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
       const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
@@ -1055,7 +1289,10 @@ const renderClaudeItems = (
 
       return h(
         'div',
-        { key: window.id, className: styleMap.quotaRow },
+        {
+          key: window.id,
+          className: `${styleMap.quotaRow} ${windows.length > 1 ? styleMap.quotaRowCondensed : ''}`,
+        },
         h(
           'div',
           { className: styleMap.quotaRowHeader },
@@ -1074,6 +1311,15 @@ const renderClaudeItems = (
         })
       );
     })
+  );
+
+  nodes.push(
+    quotaOverflowNode(
+      hiddenWindows.length,
+      popoverItems,
+      t,
+      helpers
+    )
   );
 
   return h(Fragment, null, ...nodes);
@@ -1252,7 +1498,29 @@ const renderKimiItems = (
     return h('div', { className: styleMap.quotaMessage }, t('kimi_quota.empty_data'));
   }
 
-  return rows.map((row) => {
+  const visibleRows = rows.slice(0, INLINE_QUOTA_ITEM_LIMIT);
+  const hiddenRows = rows.slice(INLINE_QUOTA_ITEM_LIMIT);
+  const popoverItems = rows.map((row) => {
+    const limit = row.limit;
+    const used = row.used;
+    const remaining =
+      limit > 0
+        ? Math.max(0, Math.min(100, Math.round(((limit - used) / limit) * 100)))
+        : used > 0
+          ? 0
+          : null;
+    const percentLabel = remaining === null ? '--' : `${remaining}%`;
+    const label = row.labelKey
+      ? t(row.labelKey, (row.labelParams ?? {}) as Record<string, string | number>)
+      : row.label ?? '';
+    return {
+      label,
+      percentLabel,
+      amountLabel: limit > 0 ? `${used} / ${limit}` : null,
+      resetLabel: formatKimiResetHint(t, row.resetHint),
+    };
+  });
+  const nodes: ReactNode[] = visibleRows.map((row) => {
     const limit = row.limit;
     const used = row.used;
     const remaining =
@@ -1269,7 +1537,10 @@ const renderKimiItems = (
 
     return h(
       'div',
-      { key: row.id, className: styleMap.quotaRow },
+      {
+        key: row.id,
+        className: `${styleMap.quotaRow} ${rows.length > 1 ? styleMap.quotaRowCondensed : ''}`,
+      },
       h(
         'div',
         { className: styleMap.quotaRowHeader },
@@ -1293,6 +1564,17 @@ const renderKimiItems = (
       })
     );
   });
+
+  nodes.push(
+    quotaOverflowNode(
+      hiddenRows.length,
+      popoverItems,
+      t,
+      helpers
+    )
+  );
+
+  return nodes;
 };
 
 export const KIMI_CONFIG: QuotaConfig<KimiQuotaState, KimiQuotaRow[]> = {

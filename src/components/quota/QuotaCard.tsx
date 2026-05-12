@@ -8,6 +8,7 @@ import type { TFunction } from 'i18next';
 import type { AuthFileItem, CredentialTokenUsage, ResolvedTheme, ThemeColors } from '@/types';
 import { TYPE_COLORS, normalizePlanType, resolveCodexPlanType } from '@/utils/quota';
 import { formatNumber } from '@/utils/format';
+import { formatCompactNumber } from '@/utils/usageAnalytics';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaStatus = 'idle' | 'loading' | 'success' | 'error';
@@ -100,7 +101,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
     quota?.error || t('common.unknown_error')
   );
   const idleMessageKey = cardIdleMessageKey ?? `${i18nPrefix}.idle`;
-  const account = resolveAccountLabel(item);
+  const credentialDisplay = resolveCredentialDisplay(item, defaultType);
   const statusLabel = resolveStatusLabel(item, t);
   const refreshedAt = formatRefreshedAt(quota, t);
   const tokenSummary = normalizeTokenUsage(tokenUsage);
@@ -137,10 +138,16 @@ export function QuotaCard<TState extends QuotaStatusState>({
           {getTypeLabel(displayType)}
         </span>
         <div className={styles.credentialText}>
-          <span className={styles.fileName}>{item.name}</span>
-          {(account || credentialPlan || statusLabel) && (
+          <span className={styles.fileName} title={credentialDisplay.title}>
+            {credentialDisplay.primary}
+          </span>
+          {(credentialDisplay.secondary || credentialPlan || statusLabel) && (
             <span className={styles.credentialMeta}>
-              {account && <span className={styles.credentialAccount}>{account}</span>}
+              {credentialDisplay.secondary && (
+                <span className={styles.credentialAccount} title={credentialDisplay.secondary}>
+                  {credentialDisplay.secondary}
+                </span>
+              )}
               {credentialPlan && (
                 <span
                   className={`${styles.credentialPlanBadge} ${
@@ -175,7 +182,9 @@ export function QuotaCard<TState extends QuotaStatusState>({
       </div>
 
       <div className={styles.tokenCell}>
-        <strong>{formatNumber(tokenSummary.totalTokens)}</strong>
+        <strong title={formatNumber(tokenSummary.totalTokens)}>
+          {formatCompactNumber(tokenSummary.totalTokens)}
+        </strong>
         <span>{t('quota_management.token_total')}</span>
         <em>
           {t('quota_management.token_request_summary', {
@@ -186,11 +195,48 @@ export function QuotaCard<TState extends QuotaStatusState>({
       </div>
 
       <div className={styles.snapshotCell}>
-        <strong>{refreshedAt}</strong>
+        <strong title={refreshedAt.title}>{refreshedAt.label}</strong>
       </div>
     </div>
   );
 }
+
+const trimFileAffixes = (name: string, provider: string): string => {
+  const withoutExt = name.replace(/\.json$/i, '');
+  const providerPrefix = provider ? new RegExp(`^${provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[-_.]?`, 'i') : null;
+  return (providerPrefix ? withoutExt.replace(providerPrefix, '') : withoutExt)
+    .replace(/-(free|plus|pro|team|default)$/i, '')
+    .trim();
+};
+
+const splitAccountLabel = (account: string): { primary: string; secondary: string } => {
+  const match = account.match(/^(.+?)\s*\((.+)\)\s*$/);
+  if (!match) return { primary: account, secondary: '' };
+  return {
+    primary: match[1].trim(),
+    secondary: match[2].trim(),
+  };
+};
+
+const resolveCredentialDisplay = (
+  item: AuthFileItem,
+  defaultType: string
+): { primary: string; secondary: string; title: string } => {
+  const account = resolveAccountLabel(item);
+  const fileLabel = trimFileAffixes(item.name, String(item.type || item.provider || defaultType));
+  if (account) {
+    const split = splitAccountLabel(account);
+    const title = split.secondary
+      ? `${split.primary} (${split.secondary})\n${item.name}`
+      : `${split.primary}\n${item.name}`;
+    return { ...split, title };
+  }
+  return {
+    primary: fileLabel || item.name,
+    secondary: '',
+    title: item.name,
+  };
+};
 
 const resolveAccountLabel = (item: AuthFileItem): string => {
   const candidates = [item.account, item.email, item.label, item.id];
@@ -266,18 +312,29 @@ const resolveCredentialPlanLabel = (
   return null;
 };
 
-const formatRefreshedAt = (quota: QuotaStatusState | undefined, t: TFunction): string => {
+const formatRefreshedAt = (
+  quota: QuotaStatusState | undefined,
+  t: TFunction
+): { label: string; title: string } => {
   const value = quota?.refreshedAt ?? quota?.refreshedAtMs;
-  if (!value) return t('quota_management.never_refreshed');
+  const fallback = t('quota_management.never_refreshed');
+  if (!value) return { label: fallback, title: fallback };
   const date = typeof value === 'number' ? new Date(value) : new Date(value);
-  if (Number.isNaN(date.getTime())) return t('quota_management.never_refreshed');
-  return new Intl.DateTimeFormat(undefined, {
+  if (Number.isNaN(date.getTime())) return { label: fallback, title: fallback };
+  const title = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+  const label = new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+  return { label, title };
 };
 
 const readUsageNumber = (
