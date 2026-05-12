@@ -6,11 +6,9 @@ import type { TFunction } from 'i18next';
 import type { CodexUsageWindow } from '@/types';
 import { normalizeNumberValue } from './parsers';
 
-export function formatQuotaResetTime(value?: string): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
+function formatFullDateTime(date: Date): string {
   return date.toLocaleString(undefined, {
+    year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -19,17 +17,18 @@ export function formatQuotaResetTime(value?: string): string {
   });
 }
 
+export function formatQuotaResetTime(value?: string): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return formatFullDateTime(date);
+}
+
 export function formatUnixSeconds(value: number | null): string {
   if (!value) return '-';
   const date = new Date(value * 1000);
   if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString(undefined, {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
+  return formatFullDateTime(date);
 }
 
 export function formatCodexResetLabel(window?: CodexUsageWindow | null): string {

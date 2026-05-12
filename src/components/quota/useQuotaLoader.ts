@@ -6,22 +6,64 @@ import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AuthFileItem } from '@/types';
 import { useQuotaStore } from '@/stores';
+import { quotaApi } from '@/services/api';
 import { getStatusFromError } from '@/utils/quota';
+import type { QuotaSnapshotRecord } from '@/types/quota';
 import type { QuotaConfig } from './quotaConfigs';
 
-type QuotaScope = 'page' | 'all';
+type QuotaScope = 'page' | 'selected';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaSetter<T> = (updater: QuotaUpdater<T>) => void;
 
-interface LoadQuotaResult<TData> {
+interface LoadQuotaResult<TState> {
   name: string;
   status: 'success' | 'error';
-  data?: TData;
+  state?: TState;
   error?: string;
   errorStatus?: number;
 }
+
+const resolveAuthIndex = (file: AuthFileItem): string => {
+  const raw = file['auth_index'] ?? file.authIndex;
+  if (raw === undefined || raw === null) return '';
+  return String(raw).trim();
+};
+
+const attachSnapshotMetadata = <TState,>(
+  state: TState,
+  snapshot?: QuotaSnapshotRecord | null
+): TState => {
+  if (!snapshot || state === null || typeof state !== 'object') return state;
+  return {
+    ...(state as Record<string, unknown>),
+    refreshedAt: snapshot.refreshed_at ?? snapshot.refreshedAt,
+    refreshedAtMs: snapshot.refreshed_at_ms ?? snapshot.refreshedAtMs,
+  } as TState;
+};
+
+const saveQuotaSnapshot = async <TState, TData>(
+  config: QuotaConfig<TState, TData>,
+  file: AuthFileItem,
+  state: TState
+): Promise<TState> => {
+  const authIndex = resolveAuthIndex(file);
+  if (!authIndex) return state;
+
+  try {
+    const snapshot = await quotaApi.saveSnapshot({
+      provider: config.type,
+      authId: typeof file.id === 'string' ? file.id : undefined,
+      authIndex,
+      fileName: file.name,
+      quota: state,
+    });
+    return attachSnapshotMetadata(state, snapshot);
+  } catch {
+    return state;
+  }
+};
 
 export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>) {
   const { t } = useTranslation();
@@ -56,10 +98,12 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
         });
 
         const results = await Promise.all(
-          targets.map(async (file): Promise<LoadQuotaResult<TData>> => {
+          targets.map(async (file): Promise<LoadQuotaResult<TState>> => {
             try {
               const data = await config.fetchQuota(file, t);
-              return { name: file.name, status: 'success', data };
+              const state = config.buildSuccessState(data);
+              const persistedState = await saveQuotaSnapshot(config, file, state);
+              return { name: file.name, status: 'success', state: persistedState };
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : t('common.unknown_error');
               const errorStatus = getStatusFromError(err);
@@ -74,7 +118,7 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
           const nextState = { ...prev };
           results.forEach((result) => {
             if (result.status === 'success') {
-              nextState[result.name] = config.buildSuccessState(result.data as TData);
+              nextState[result.name] = result.state as TState;
             } else {
               nextState[result.name] = config.buildErrorState(
                 result.error || t('common.unknown_error'),

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useAuthStore } from '@/stores';
-import { authFilesApi, configFileApi } from '@/services/api';
+import { authFilesApi, configFileApi, quotaApi } from '@/services/api';
 import {
   QuotaSection,
   ANTIGRAVITY_CONFIG,
@@ -16,6 +16,7 @@ import {
   KIMI_CONFIG
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
+import type { QuotaSnapshotsPayload } from '@/types/quota';
 import styles from './QuotaPage.module.scss';
 
 export function QuotaPage() {
@@ -23,6 +24,10 @@ export function QuotaPage() {
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
 
   const [files, setFiles] = useState<AuthFileItem[]>([]);
+  const [quotaSnapshots, setQuotaSnapshots] = useState<QuotaSnapshotsPayload>({
+    snapshots: [],
+    token_usage: {},
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -51,16 +56,29 @@ export function QuotaPage() {
     }
   }, [t]);
 
+  const loadQuotaSnapshots = useCallback(async () => {
+    try {
+      setQuotaSnapshots(await quotaApi.getSnapshots());
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
+      setError((prev) => prev || errorMessage);
+    }
+  }, [t]);
+
   const handleHeaderRefresh = useCallback(async () => {
-    await Promise.all([loadConfig(), loadFiles()]);
-  }, [loadConfig, loadFiles]);
+    await Promise.all([loadConfig(), loadFiles(), loadQuotaSnapshots()]);
+  }, [loadConfig, loadFiles, loadQuotaSnapshots]);
 
   useHeaderRefresh(handleHeaderRefresh);
 
   useEffect(() => {
     loadFiles();
     loadConfig();
-  }, [loadFiles, loadConfig]);
+    loadQuotaSnapshots();
+  }, [loadFiles, loadConfig, loadQuotaSnapshots]);
+
+  const snapshots = quotaSnapshots.snapshots;
+  const tokenUsage = quotaSnapshots.token_usage ?? quotaSnapshots.tokenUsage ?? {};
 
   return (
     <div className={styles.container}>
@@ -76,30 +94,40 @@ export function QuotaPage() {
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
       />
       <QuotaSection
         config={ANTIGRAVITY_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
       />
       <QuotaSection
         config={CODEX_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
       />
       <QuotaSection
         config={GEMINI_CLI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
       />
       <QuotaSection
         config={KIMI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
       />
     </div>
   );

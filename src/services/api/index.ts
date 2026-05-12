@@ -2,6 +2,7 @@ export * from './client';
 export * from './apiCall';
 export * from './apiKeyUsage';
 export * from './usage';
+export * from './quota';
 export * from './config';
 export * from './configFile';
 export * from './apiKeys';

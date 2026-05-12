@@ -251,7 +251,7 @@
   }
 }
 
-// 卡片渐变背景 — 基于 TYPE_COLORS light.bg 转 rgba
+// Subtle provider tint backgrounds based on TYPE_COLORS light.bg.
 .claudeCard {
   background-image: linear-gradient(180deg,
       rgba(251, 236, 228, 0.18),
@@ -618,6 +618,389 @@
   }
 }
 
+.quotaToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 76%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+
+  @include mobile {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+.selectPageControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 650;
+  color: var(--text-primary);
+
+  input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+  }
+}
+
+.selectedSummary {
+  flex: 1;
+  min-width: 88px;
+}
+
+.pageSizeSwitch,
+.paginationBar div {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  button {
+    border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+    border-radius: 6px;
+    padding: 4px 7px;
+    background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 650;
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+      background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+  }
+}
+
+.activePageSize {
+  color: var(--primary-color) !important;
+  border-color: color-mix(in srgb, var(--primary-color) 42%, var(--border-color)) !important;
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-primary)) !important;
+}
+
+.quotaList {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 94%, transparent);
+}
+
+.quotaListHeader,
+.quotaListRow {
+  display: grid;
+  grid-template-columns: 30px minmax(178px, 1fr) minmax(0, 2.35fr) minmax(92px, 0.52fr) minmax(92px, 0.48fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.quotaListHeader {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+
+  @include mobile {
+    display: none;
+  }
+}
+
+.quotaListRow {
+  min-height: 52px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+  transition: background $transition-fast, border-color $transition-fast;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-primary));
+    border-color: color-mix(in srgb, var(--primary-color) 18%, var(--border-color));
+  }
+
+  .quotaSection {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+    min-height: 36px;
+    overflow: visible;
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  .quotaRow {
+    display: grid;
+    grid-template-columns: minmax(98px, 1fr) minmax(128px, auto);
+    grid-template-rows: auto 3px;
+    align-items: center;
+    flex: 1 1 178px;
+    gap: 3px 6px;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-secondary) 42%, transparent);
+  }
+
+  .quotaRowHeader {
+    display: contents;
+  }
+
+  .quotaModel {
+    font-size: 11px;
+    line-height: 1.2;
+    overflow: visible;
+    text-overflow: initial;
+    white-space: normal;
+  }
+
+  .quotaMeta {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-width: 128px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .quotaReset,
+  .quotaAmount {
+    max-width: none;
+    overflow: visible;
+    text-overflow: initial;
+    white-space: normal;
+  }
+
+  .quotaBar {
+    grid-column: 1 / -1;
+    height: 3px;
+  }
+
+  .quotaMessage {
+    padding: 0;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .quotaError {
+    padding: 4px 6px;
+    white-space: normal;
+  }
+
+  .codexPlan {
+    flex: 0 0 auto;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 62%, transparent);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-secondary) 42%, transparent);
+    font-size: 11px;
+  }
+
+  .premiumPlanValue {
+    padding: 1px 6px;
+    font-size: 11px;
+
+    &::before {
+      inset: -3px -5px;
+    }
+  }
+
+  @include mobile {
+    grid-template-columns: 28px 1fr;
+    align-items: flex-start;
+
+    .quotaSection,
+    .tokenCell,
+    .snapshotCell {
+      grid-column: 2;
+    }
+
+    .quotaSection {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+  }
+}
+
+.rowSelect {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+  }
+}
+
+.rowSelect input,
+.selectPageControl input {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 86%, var(--text-tertiary));
+  border-radius: 4px;
+  background: var(--bg-primary);
+  cursor: pointer;
+  transition: background $transition-fast, border-color $transition-fast, box-shadow $transition-fast;
+
+  &::after {
+    content: '';
+    width: 4px;
+    height: 8px;
+    border: solid var(--primary-contrast, #fff);
+    border-width: 0 2px 2px 0;
+    opacity: 0;
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  &:checked {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+  }
+
+  &:checked::after {
+    opacity: 1;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 24%, transparent);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+.credentialCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.credentialText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.credentialMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.credentialAccount,
+.credentialStatus {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.credentialStatus {
+  color: var(--text-secondary);
+}
+
+.credentialPlanBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-secondary) 64%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.credentialPlanBadgePremium {
+  border-color: rgba(217, 165, 22, 0.68);
+  background: linear-gradient(135deg, #fff7d0 0%, #f3cf55 100%);
+  color: #6b4b00;
+}
+
+:global([data-theme='dark']) .credentialPlanBadgePremium {
+  border-color: rgba(226, 180, 50, 0.68);
+  background: linear-gradient(135deg, #4f3d0b 0%, #8f6d10 100%);
+  color: #fff0a8;
+}
+
+.tokenCell,
+.snapshotCell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.2;
+
+  strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  em {
+    overflow: hidden;
+    color: var(--text-tertiary);
+    font-style: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.snapshotCell strong {
+  overflow: visible;
+  text-overflow: initial;
+  white-space: normal;
+}
+
 .cardHeader {
   display: flex;
   align-items: center;
@@ -626,20 +1009,20 @@
 }
 
 .typeBadge {
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 12px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .fileName {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
   word-break: break-all;
-  line-height: 1.4;
+  line-height: 1.2;
 }
 
 .pagination {
@@ -650,6 +1033,22 @@
   margin-top: $spacing-lg;
   padding-top: $spacing-md;
   border-top: 1px solid var(--border-color);
+}
+
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 7px 10px 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+
+  @include mobile {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .pageInfo {

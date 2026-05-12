@@ -252,8 +252,20 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
     allowed?: boolean
   ) => {
     if (!window) return;
-    const resetLabel = formatCodexResetLabel(window);
+    const resetAt = normalizeNumberValue(window.reset_at ?? window.resetAt);
+    const resetAfter = normalizeNumberValue(window.reset_after_seconds ?? window.resetAfterSeconds);
+    const targetResetAt =
+      resetAt !== null && resetAt > 0
+        ? resetAt
+        : resetAfter !== null && resetAfter > 0
+          ? Math.floor(Date.now() / 1000 + resetAfter)
+          : undefined;
+    const resetLabel =
+      targetResetAt !== undefined ? formatCodexResetLabel({ reset_at: targetResetAt }) : '-';
     const usedPercentRaw = normalizeNumberValue(window.used_percent ?? window.usedPercent);
+    const windowMinutesRaw = normalizeNumberValue(
+      window.limit_window_seconds ?? window.limitWindowSeconds
+    );
     const isLimitReached = Boolean(limitReached) || allowed === false;
     const usedPercent = usedPercentRaw ?? (isLimitReached && resetLabel !== '-' ? 100 : null);
     windows.push({
@@ -263,6 +275,11 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
       labelParams,
       usedPercent,
       resetLabel,
+      resetAt: targetResetAt,
+      windowMinutes:
+        windowMinutesRaw !== null && windowMinutesRaw > 0
+          ? Math.round(windowMinutesRaw / 60)
+          : undefined,
     });
   };
 
@@ -704,8 +721,12 @@ const renderAntigravityItems = (
   }
 
   return groups.map((group) => {
-    const clamped = Math.max(0, Math.min(1, group.remainingFraction));
-    const percent = Math.round(clamped * 100);
+    const remainingFraction =
+      typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
+    const clamped =
+      remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
+    const percent = clamped === null ? null : Math.round(clamped * 100);
+    const percentLabel = percent === null ? '--' : `${percent}%`;
     const resetLabel = formatQuotaResetTime(group.resetTime);
 
     return h(
@@ -718,7 +739,7 @@ const renderAntigravityItems = (
         h(
           'div',
           { className: styleMap.quotaMeta },
-          h('span', { className: styleMap.quotaPercent }, `${percent}%`),
+          h('span', { className: styleMap.quotaPercent }, percentLabel),
           h('span', { className: styleMap.quotaReset }, resetLabel)
         )
       ),
@@ -731,64 +752,37 @@ const renderAntigravityItems = (
   });
 };
 
-const PREMIUM_GEMINI_CLI_TIER_IDS = new Set(['g1-ultra-tier']);
-const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lite']);
-
 const renderCodexItems = (
   quota: CodexQuotaState,
   t: TFunction,
   helpers: QuotaRenderHelpers
 ): ReactNode => {
   const { styles: styleMap, QuotaProgressBar } = helpers;
-  const { createElement: h, Fragment } = React;
+  const { createElement: h } = React;
   const windows = quota.windows ?? [];
-  const planType = quota.planType ?? null;
 
-  const getPlanLabel = (pt?: string | null): string | null => {
-    const normalized = normalizePlanType(pt);
-    if (!normalized) return null;
-    if (normalized === 'pro') return t('codex_quota.plan_pro');
-    if (PREMIUM_CODEX_PLAN_TYPES.has(normalized) && normalized !== 'pro') {
-      return t('codex_quota.plan_prolite');
-    }
-    if (normalized === 'plus') return t('codex_quota.plan_plus');
-    if (normalized === 'team') return t('codex_quota.plan_team');
-    if (normalized === 'free') return t('codex_quota.plan_free');
-    return pt || normalized;
-  };
-
-  const planLabel = getPlanLabel(planType);
-  const isPremiumPlan = PREMIUM_CODEX_PLAN_TYPES.has(normalizePlanType(planType) ?? '');
-  const nodes: ReactNode[] = [];
-
-  if (planLabel) {
-    const valueClass = isPremiumPlan ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
-    nodes.push(
+  if (windows.length === 0) {
+    return (
       h(
         'div',
-        { key: 'plan', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('codex_quota.plan_label')),
-        h('span', { className: valueClass }, planLabel)
+        { className: styleMap.quotaMessage },
+        t('codex_quota.empty_windows')
       )
     );
   }
 
-  if (windows.length === 0) {
-    nodes.push(
-      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('codex_quota.empty_windows'))
-    );
-    return h(Fragment, null, ...nodes);
-  }
-
-  nodes.push(
-    ...windows.map((window) => {
-      const used = window.usedPercent;
+  return windows.map((window) => {
+      const used = typeof window.usedPercent === 'number' ? window.usedPercent : null;
       const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
       const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
       const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
       const windowLabel = window.labelKey
         ? t(window.labelKey, window.labelParams as Record<string, string | number>)
         : window.label;
+      const resetLabel =
+        typeof window.resetAt === 'number' && window.resetAt > 0
+          ? formatCodexResetLabel({ reset_at: window.resetAt })
+          : window.resetLabel;
 
       return h(
         'div',
@@ -801,7 +795,7 @@ const renderCodexItems = (
             'div',
             { className: styleMap.quotaMeta },
             h('span', { className: styleMap.quotaPercent }, percentLabel),
-            h('span', { className: styleMap.quotaReset }, window.resetLabel)
+            h('span', { className: styleMap.quotaReset }, resetLabel)
           )
         ),
         h(QuotaProgressBar, {
@@ -810,10 +804,7 @@ const renderCodexItems = (
           mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
         })
       );
-    })
-  );
-
-  return h(Fragment, null, ...nodes);
+    });
 };
 
 const renderGeminiCliItems = (
@@ -824,23 +815,8 @@ const renderGeminiCliItems = (
   const { styles: styleMap, QuotaProgressBar } = helpers;
   const { createElement: h, Fragment } = React;
   const buckets = quota.buckets ?? [];
-  const tierLabel = quota.tierLabel ?? null;
-  const tierId = quota.tierId ?? null;
   const creditBalance = quota.creditBalance ?? null;
-  const isPremiumTier = tierId !== null && PREMIUM_GEMINI_CLI_TIER_IDS.has(tierId);
   const nodes: ReactNode[] = [];
-
-  if (tierLabel) {
-    const valueClass = isPremiumTier ? styleMap.premiumPlanValue : styleMap.codexPlanValue;
-    nodes.push(
-      h(
-        'div',
-        { key: 'tier', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('gemini_cli_quota.tier_label')),
-        h('span', { className: valueClass }, tierLabel)
-      )
-    );
-  }
 
   if (creditBalance !== null) {
     nodes.push(
@@ -866,7 +842,8 @@ const renderGeminiCliItems = (
 
   nodes.push(
     ...buckets.map((bucket) => {
-      const fraction = bucket.remainingFraction;
+      const fraction =
+        typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
       const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
       const percent = clamped === null ? null : Math.round(clamped * 100);
       const percentLabel = percent === null ? '--' : `${percent}%`;
@@ -1047,19 +1024,7 @@ const renderClaudeItems = (
   const { createElement: h, Fragment } = React;
   const windows = quota.windows ?? [];
   const extraUsage = quota.extraUsage ?? null;
-  const planType = quota.planType ?? null;
   const nodes: ReactNode[] = [];
-
-  if (planType) {
-    nodes.push(
-      h(
-        'div',
-        { key: 'plan', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('claude_quota.plan_label')),
-        h('span', { className: styleMap.codexPlanValue }, t(`claude_quota.${planType}`))
-      )
-    );
-  }
 
   if (extraUsage && extraUsage.is_enabled) {
     const usedLabel = `$${(extraUsage.used_credits / 100).toFixed(2)} / $${(extraUsage.monthly_limit / 100).toFixed(2)}`;

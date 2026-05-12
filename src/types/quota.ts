@@ -189,6 +189,8 @@ export interface ClaudeQuotaState {
   windows: ClaudeQuotaWindow[];
   extraUsage?: ClaudeExtraUsage | null;
   planType?: string | null;
+  refreshedAt?: string;
+  refreshedAtMs?: number;
   error?: string;
   errorStatus?: number;
 }
@@ -198,13 +200,15 @@ export interface AntigravityQuotaGroup {
   id: string;
   label: string;
   models: string[];
-  remainingFraction: number;
+  remainingFraction: number | null;
   resetTime?: string;
 }
 
 export interface AntigravityQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   groups: AntigravityQuotaGroup[];
+  refreshedAt?: string;
+  refreshedAtMs?: number;
   error?: string;
   errorStatus?: number;
 }
@@ -225,6 +229,8 @@ export interface GeminiCliQuotaState {
   tierLabel?: string | null;
   tierId?: string | null;
   creditBalance?: number | null;
+  refreshedAt?: string;
+  refreshedAtMs?: number;
   error?: string;
   errorStatus?: number;
 }
@@ -236,12 +242,21 @@ export interface CodexQuotaWindow {
   labelParams?: Record<string, string | number>;
   usedPercent: number | null;
   resetLabel: string;
+  resetAt?: number;
+  windowMinutes?: number;
 }
 
 export interface CodexQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   windows: CodexQuotaWindow[];
   planType?: string | null;
+  credits?: {
+    hasCredits?: boolean;
+    unlimited?: boolean;
+    balance?: string | null;
+  } | null;
+  refreshedAt?: string;
+  refreshedAtMs?: number;
   error?: string;
   errorStatus?: number;
 }
@@ -303,6 +318,60 @@ export interface KimiQuotaRow {
 export interface KimiQuotaState {
   status: 'idle' | 'loading' | 'success' | 'error';
   rows: KimiQuotaRow[];
+  refreshedAt?: string;
+  refreshedAtMs?: number;
   error?: string;
   errorStatus?: number;
+}
+
+export interface QuotaSnapshotRecord {
+  provider: string;
+  auth_id?: string;
+  authId?: string;
+  auth_index: string;
+  authIndex?: string;
+  file_name?: string;
+  fileName?: string;
+  quota: unknown;
+  refreshed_at?: string;
+  refreshedAt?: string;
+  refreshed_at_ms?: number;
+  refreshedAtMs?: number;
+  updated_at?: string;
+  updatedAt?: string;
+  updated_at_ms?: number;
+  updatedAtMs?: number;
+}
+
+export interface CredentialTokenUsage {
+  auth_index: string;
+  authIndex?: string;
+  request_count?: number;
+  requestCount?: number;
+  success_count?: number;
+  successCount?: number;
+  failure_count?: number;
+  failureCount?: number;
+  input_tokens?: number;
+  inputTokens?: number;
+  output_tokens?: number;
+  outputTokens?: number;
+  reasoning_tokens?: number;
+  reasoningTokens?: number;
+  cached_tokens?: number;
+  cachedTokens?: number;
+  cache_tokens?: number;
+  cacheTokens?: number;
+  total_tokens?: number;
+  totalTokens?: number;
+  last_used_at?: string;
+  lastUsedAt?: string;
+  last_used_at_ms?: number;
+  lastUsedAtMs?: number;
+}
+
+export interface QuotaSnapshotsPayload {
+  snapshots: QuotaSnapshotRecord[];
+  token_usage?: Record<string, CredentialTokenUsage>;
+  tokenUsage?: Record<string, CredentialTokenUsage>;
 }
