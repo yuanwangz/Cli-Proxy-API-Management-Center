@@ -14,6 +14,15 @@ import { apiKeysApi, authFilesApi, usageApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types/authFile';
 import type { UsagePayload, UsageTimeRange } from '@/types/usage';
+import {
+  credentialProviderKey,
+  getCredentialNextRetryAt,
+  getCredentialStatusMessage,
+  isCredentialCooling,
+  isCredentialDisabled,
+  isCredentialEffectivelyAvailable,
+  readCredentialText,
+} from '@/utils/authFileStatus';
 import { downloadBlob } from '@/utils/download';
 import {
   USAGE_TIME_RANGE_OPTIONS,
@@ -46,7 +55,7 @@ type Series = {
 };
 
 const DEFAULT_FILTERS: UsageFilters = {
-  range: '7d',
+  range: 'today',
   provider: 'all',
   model: 'all',
   account: 'all',
@@ -90,12 +99,21 @@ type CredentialCoolingRow = {
   nextRetryAt: number;
 };
 
+type CredentialHealthGroup = {
+  provider: string;
+  total: number;
+  cooling: number;
+  disabled: number;
+  available: number;
+};
+
 type CredentialHealthSummary = {
   total: number;
   cooling: number;
   disabled: number;
   available: number;
   rows: CredentialCoolingRow[];
+  groups: CredentialHealthGroup[];
   error: string;
 };
 
@@ -105,60 +123,46 @@ const EMPTY_CREDENTIAL_SUMMARY: CredentialHealthSummary = {
   disabled: 0,
   available: 0,
   rows: [],
+  groups: [],
   error: '',
-};
-
-const QUOTA_COOLDOWN_PATTERN =
-  /(quota|exhaust|capacity|limit|rate|429|too many|credit|配额|额度|限流|冷却|资源耗尽|用量)/i;
-
-const readText = (value: unknown): string => {
-  if (typeof value === 'string') return value.trim();
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
-  return '';
-};
-
-const parseTimeMs = (value: unknown): number => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value < 1e12 ? value * 1000 : value;
-  }
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return 0;
-    const asNumber = Number(trimmed);
-    if (Number.isFinite(asNumber)) return asNumber < 1e12 ? asNumber * 1000 : asNumber;
-    const parsed = Date.parse(trimmed);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-};
-
-const isDisabledCredential = (file: AuthFileItem): boolean => {
-  const raw = file.disabled as unknown;
-  if (typeof raw === 'boolean') return raw;
-  if (typeof raw === 'number') return raw !== 0;
-  if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
-  return false;
 };
 
 const buildCredentialHealthSummary = (
   files: AuthFileItem[],
   nowMs = Date.now()
 ): CredentialHealthSummary => {
+  const groups = new Map<string, CredentialHealthGroup>();
+  const ensureGroup = (provider: string): CredentialHealthGroup => {
+    const existing = groups.get(provider);
+    if (existing) return existing;
+    const next = { provider, total: 0, cooling: 0, disabled: 0, available: 0 };
+    groups.set(provider, next);
+    return next;
+  };
+
   const rows = files
+    .filter((file) => isCredentialCooling(file, nowMs))
     .map((file) => {
-      const nextRetryAt = parseTimeMs(file['next_retry_after'] ?? file.nextRetryAfter);
-      const message = readText(file['status_message'] ?? file.statusMessage);
+      const nextRetryAt = getCredentialNextRetryAt(file);
+      const message = getCredentialStatusMessage(file);
       return {
-        name: readText(file.name) || readText(file.id) || '未命名凭证',
-        provider: readText(file.provider ?? file.type) || 'unknown',
+        name: readCredentialText(file.name) || readCredentialText(file.id) || '未命名凭证',
+        provider: credentialProviderKey(file),
         message,
         nextRetryAt,
       };
     })
-    .filter((row) => row.nextRetryAt > nowMs && QUOTA_COOLDOWN_PATTERN.test(row.message))
     .sort((a, b) => a.nextRetryAt - b.nextRetryAt);
 
-  const disabled = files.filter(isDisabledCredential).length;
+  files.forEach((file) => {
+    const group = ensureGroup(credentialProviderKey(file));
+    group.total += 1;
+    if (isCredentialDisabled(file)) group.disabled += 1;
+    if (isCredentialCooling(file, nowMs)) group.cooling += 1;
+    if (isCredentialEffectivelyAvailable(file, nowMs)) group.available += 1;
+  });
+
+  const disabled = files.filter(isCredentialDisabled).length;
   const cooling = rows.length;
   const total = files.length;
 
@@ -166,8 +170,13 @@ const buildCredentialHealthSummary = (
     total,
     cooling,
     disabled,
-    available: Math.max(0, total - cooling - disabled),
+    available: files.filter((file) => isCredentialEffectivelyAvailable(file, nowMs)).length,
     rows,
+    groups: Array.from(groups.values()).sort((left, right) => {
+      if (right.cooling !== left.cooling) return right.cooling - left.cooling;
+      if (right.available !== left.available) return right.available - left.available;
+      return left.provider.localeCompare(right.provider);
+    }),
     error: '',
   };
 };
@@ -515,14 +524,28 @@ function RequestDistributionPanel({ rows }: { rows: GroupRow[] }) {
   );
 }
 
+const providerDisplayName = (provider: string): string => {
+  switch (provider) {
+    case 'gemini-cli':
+      return 'Gemini CLI';
+    case 'iflow':
+      return 'iFlow';
+    case 'unknown':
+      return '其他';
+    default:
+      return provider.charAt(0).toUpperCase() + provider.slice(1);
+  }
+};
+
 function CredentialCoolingPanel({ summary }: { summary: CredentialHealthSummary }) {
   const coolingRate = summary.total > 0 ? (summary.cooling / summary.total) * 100 : 0;
+  const visibleGroups = summary.groups.slice(0, 6);
 
   return (
     <section className={styles.sidePanel}>
       <div className={styles.panelHeader}>
         <h2>凭证冷却</h2>
-        <span className={styles.panelHint}>额度冷却 / 总凭证</span>
+        <span className={styles.panelHint}>按类型汇总</span>
       </div>
       <div className={styles.coolingPanelBody}>
         <div className={styles.coolingNumbers}>
@@ -538,17 +561,34 @@ function CredentialCoolingPanel({ summary }: { summary: CredentialHealthSummary 
         </div>
         {summary.error ? (
           <div className={styles.emptyInline}>{summary.error}</div>
-        ) : summary.rows.length > 0 ? (
-          <div className={styles.coolingList}>
-            {summary.rows.slice(0, 3).map((row) => (
-              <div key={`${row.name}-${row.nextRetryAt}`}>
-                <span title={row.name}>{row.name}</span>
-                <em>{new Date(row.nextRetryAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</em>
+        ) : visibleGroups.length > 0 ? (
+          <div className={styles.coolingTypeTable}>
+            <div className={styles.coolingTypeHead}>
+              <span>类型</span>
+              <span>可用</span>
+              <span>限流</span>
+              <span>总量</span>
+            </div>
+            {visibleGroups.map((group) => (
+              <div key={group.provider} className={styles.coolingTypeRow}>
+                <span title={providerDisplayName(group.provider)}>{providerDisplayName(group.provider)}</span>
+                <strong className={styles.good}>{group.available.toLocaleString()}</strong>
+                <em className={group.cooling > 0 ? styles.bad : ''}>{group.cooling.toLocaleString()}</em>
+                <small>{group.total.toLocaleString()}</small>
               </div>
             ))}
+            {summary.rows.length > 0 && (
+              <div className={styles.coolingNextHint}>
+                最近恢复：{providerDisplayName(summary.rows[0].provider)} ·{' '}
+                {new Date(summary.rows[0].nextRetryAt).toLocaleTimeString('zh-CN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </div>
+            )}
           </div>
         ) : (
-          <div className={styles.emptyInline}>暂无额度冷却凭证</div>
+          <div className={styles.emptyInline}>暂无凭证数据</div>
         )}
       </div>
     </section>

@@ -10,12 +10,19 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useQuotaStore, useThemeStore } from '@/stores';
 import type { AuthFileItem, ResolvedTheme } from '@/types';
 import type { CredentialTokenUsage, QuotaSnapshotRecord } from '@/types/quota';
+import {
+  credentialMatchesSearch,
+  getCredentialNextRetryAt,
+  isCredentialEffectivelyAvailable,
+  isCredentialQuotaLimited,
+  isCredentialUnauthorized,
+} from '@/utils/authFileStatus';
 import { parseTimestampMs } from '@/utils/timestamp';
 import { QuotaCard } from './QuotaCard';
 import type { QuotaStatusState } from './QuotaCard';
 import { useQuotaLoader } from './useQuotaLoader';
 import type { QuotaConfig } from './quotaConfigs';
-import { IconRefreshCw } from '@/components/ui/icons';
+import { IconRefreshCw, IconSearch, IconX } from '@/components/ui/icons';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
@@ -202,8 +209,6 @@ const nearestResetMs = (quota: QuotaStatusState | undefined, nowMs: number): num
   return times.length > 0 ? Math.min(...times) : NO_RESET_TIME;
 };
 
-const isAvailableFile = (file: AuthFileItem): boolean => !file.disabled && !file.unavailable;
-
 const quotaWithSnapshotMetadata = <TState extends QuotaStatusState>(
   snapshot: QuotaSnapshotRecord
 ): TState | null => {
@@ -237,18 +242,35 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
   const [resetSort, setResetSort] = useState<ResetSortMode>('default');
   const [sortNowMs, setSortNowMs] = useState(() => Date.now());
+  const [availabilityNowMs, setAvailabilityNowMs] = useState(() => Date.now());
+  const [searchQuery, setSearchQuery] = useState('');
 
   const matchingFiles = useMemo(() => files.filter((file) => config.filterFn(file)), [
     files,
     config
   ]);
 
+  const typeSummary = useMemo(() => {
+    const nowMs = availabilityNowMs;
+    return {
+      total: matchingFiles.length,
+      available: matchingFiles.filter((file) => isCredentialEffectivelyAvailable(file, nowMs)).length,
+      quotaLimited: matchingFiles.filter((file) => isCredentialQuotaLimited(file, nowMs)).length,
+      unauthorized: matchingFiles.filter(isCredentialUnauthorized).length,
+    };
+  }, [availabilityNowMs, matchingFiles]);
+
   const { quota, loadQuota } = useQuotaLoader(config);
 
+  const searchedFiles = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return matchingFiles.filter((file) => credentialMatchesSearch(file, query));
+  }, [matchingFiles, searchQuery]);
+
   const displayFiles = useMemo(() => {
-    const filtered = matchingFiles.filter((file) => {
+    const filtered = searchedFiles.filter((file) => {
       if (availabilityFilter === 'all') return true;
-      const available = isAvailableFile(file);
+      const available = isCredentialEffectivelyAvailable(file, availabilityNowMs);
       return availabilityFilter === 'available' ? available : !available;
     });
 
@@ -265,7 +287,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         return left.index - right.index;
       })
       .map((entry) => entry.file);
-  }, [availabilityFilter, matchingFiles, quota, resetSort, sortNowMs]);
+  }, [availabilityFilter, availabilityNowMs, quota, resetSort, searchedFiles, sortNowMs]);
 
   const {
     pageSize,
@@ -348,9 +370,35 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     });
   }, [config.type, matchingFiles, setQuota, snapshots]);
 
+  useEffect(() => {
+    const nowMs = Date.now();
+    const nextRetryAt = matchingFiles
+      .map(getCredentialNextRetryAt)
+      .filter((value) => value > nowMs)
+      .sort((left, right) => left - right)[0];
+
+    if (!nextRetryAt) return;
+
+    const timeout = window.setTimeout(() => {
+      setAvailabilityNowMs(Date.now());
+    }, Math.max(1000, nextRetryAt - nowMs + 1000));
+
+    return () => window.clearTimeout(timeout);
+  }, [availabilityNowMs, matchingFiles]);
+
   const handleAvailabilityChange = useCallback(
     (value: AvailabilityFilter) => {
+      setAvailabilityNowMs(Date.now());
       setAvailabilityFilter(value);
+      goToFirst();
+    },
+    [goToFirst]
+  );
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setAvailabilityNowMs(Date.now());
+      setSearchQuery(value);
       goToFirst();
     },
     [goToFirst]
@@ -413,6 +461,24 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       title={titleNode}
       extra={
         <div className={styles.headerActions}>
+          <div className={styles.typeSummary} aria-label={t('quota_management.type_summary')}>
+            <span>
+              {t('quota_management.summary_total')}
+              <strong>{typeSummary.total.toLocaleString()}</strong>
+            </span>
+            <span>
+              {t('quota_management.summary_available')}
+              <strong>{typeSummary.available.toLocaleString()}</strong>
+            </span>
+            <span className={typeSummary.quotaLimited > 0 ? styles.summaryWarning : ''}>
+              {t('quota_management.summary_quota_limited')}
+              <strong>{typeSummary.quotaLimited.toLocaleString()}</strong>
+            </span>
+            <span className={typeSummary.unauthorized > 0 ? styles.summaryDanger : ''}>
+              {t('quota_management.summary_401')}
+              <strong>{typeSummary.unauthorized.toLocaleString()}</strong>
+            </span>
+          </div>
           <Button
             variant="secondary"
             size="sm"
@@ -437,6 +503,26 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       ) : (
         <>
           <div className={styles.quotaToolbar}>
+            <div className={styles.quotaSearch}>
+              <IconSearch size={14} />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                placeholder={t('quota_management.search_placeholder')}
+                aria-label={t('quota_management.search_placeholder')}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => handleSearchChange('')}
+                  aria-label={t('quota_management.search_clear')}
+                  title={t('quota_management.search_clear')}
+                >
+                  <IconX size={13} />
+                </button>
+              )}
+            </div>
             <label className={styles.selectPageControl}>
               <input
                 type="checkbox"

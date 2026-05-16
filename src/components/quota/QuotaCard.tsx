@@ -6,6 +6,12 @@ import { useTranslation } from 'react-i18next';
 import type { ReactElement, ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import type { AuthFileItem, CredentialTokenUsage, ResolvedTheme, ThemeColors } from '@/types';
+import {
+  getCredentialNextRetryAt,
+  getCredentialStatusMessage,
+  isCredentialDisabled,
+  isQuotaCooldownMessage,
+} from '@/utils/authFileStatus';
 import { TYPE_COLORS, normalizePlanType, resolveCodexPlanType } from '@/utils/quota';
 import { formatNumber } from '@/utils/format';
 import { formatCompactNumber } from '@/utils/usageAnalytics';
@@ -247,14 +253,17 @@ const resolveAccountLabel = (item: AuthFileItem): string => {
 };
 
 const resolveStatusLabel = (item: AuthFileItem, t: TFunction): string => {
-  if (item.disabled) return t('quota_management.status_disabled');
-  if (item.unavailable) return t('quota_management.status_unavailable');
-  const message =
-    typeof item.statusMessage === 'string'
-      ? item.statusMessage.trim()
-      : typeof item['status_message'] === 'string'
-        ? String(item['status_message']).trim()
-        : '';
+  if (isCredentialDisabled(item)) return t('quota_management.status_disabled');
+  const nowMs = Date.now();
+  const nextRetryAt = getCredentialNextRetryAt(item);
+  const message = getCredentialStatusMessage(item);
+  if (nextRetryAt > 0 && nextRetryAt <= nowMs && isQuotaCooldownMessage(message)) {
+    return '';
+  }
+  if (item.unavailable && (nextRetryAt === 0 || nextRetryAt > nowMs)) {
+    if (message) return message;
+    return t('quota_management.status_unavailable');
+  }
   if (message) return message;
   if (typeof item.status === 'string' && item.status.trim()) return item.status.trim();
   return '';

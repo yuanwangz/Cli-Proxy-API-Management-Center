@@ -17,6 +17,7 @@ import {
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
 import type { QuotaSnapshotsPayload } from '@/types/quota';
+import { getCredentialNextRetryAt } from '@/utils/authFileStatus';
 import styles from './QuotaPage.module.scss';
 
 export function QuotaPage() {
@@ -76,6 +77,22 @@ export function QuotaPage() {
     loadConfig();
     loadQuotaSnapshots();
   }, [loadFiles, loadConfig, loadQuotaSnapshots]);
+
+  useEffect(() => {
+    const nowMs = Date.now();
+    const nextRetryAt = files
+      .map(getCredentialNextRetryAt)
+      .filter((value) => value > nowMs)
+      .sort((left, right) => left - right)[0];
+
+    if (!nextRetryAt) return;
+
+    const timeout = window.setTimeout(() => {
+      void Promise.all([loadFiles(), loadQuotaSnapshots()]);
+    }, Math.max(1000, nextRetryAt - nowMs + 1000));
+
+    return () => window.clearTimeout(timeout);
+  }, [files, loadFiles, loadQuotaSnapshots]);
 
   const snapshots = quotaSnapshots.snapshots;
   const tokenUsage = quotaSnapshots.token_usage ?? quotaSnapshots.tokenUsage ?? {};

@@ -583,6 +583,45 @@ const fetchCodexQuota = async (
   return { planType: planTypeFromUsage ?? planTypeFromFile, windows };
 };
 
+const codexWindowDurationMinutes = (window: CodexQuotaWindow): number | null => {
+  if (typeof window.windowMinutes === 'number' && Number.isFinite(window.windowMinutes)) {
+    return window.windowMinutes;
+  }
+  const duration = String(window.labelParams?.duration ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+  const match = duration.match(/^(\d+)([dhm])$/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return null;
+  if (match[2] === 'd') return value * 24 * 60;
+  if (match[2] === 'h') return value * 60;
+  return value;
+};
+
+const resolveCodexWindowLabel = (window: CodexQuotaWindow, t: TFunction): string => {
+  const labelKey = window.labelKey ?? '';
+  const labelParams = (window.labelParams ?? {}) as Record<string, string | number>;
+  if (!labelKey.startsWith('codex_quota.observed_')) {
+    return labelKey ? t(labelKey, labelParams) : window.label;
+  }
+
+  const minutes = codexWindowDurationMinutes(window);
+  const name = labelParams.name || window.label || 'Codex';
+  if (minutes === 5 * 60) {
+    return labelKey.includes('additional')
+      ? t('codex_quota.additional_primary_window', { name })
+      : t('codex_quota.primary_window');
+  }
+  if (minutes === 7 * 24 * 60) {
+    return labelKey.includes('additional')
+      ? t('codex_quota.additional_secondary_window', { name })
+      : t('codex_quota.secondary_window');
+  }
+  return t(labelKey, labelParams);
+};
+
 const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
 
 const GEMINI_CLI_TIER_LABELS: Record<string, string> = {
@@ -933,9 +972,7 @@ const renderCodexItems = (
     const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
     const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
     const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
-    const label = window.labelKey
-      ? t(window.labelKey, window.labelParams as Record<string, string | number>)
-      : window.label;
+    const label = resolveCodexWindowLabel(window, t);
     const resetLabel =
       typeof window.resetAt === 'number' && window.resetAt > 0
         ? formatCodexResetLabel({ reset_at: window.resetAt })
@@ -947,9 +984,7 @@ const renderCodexItems = (
       const clampedUsed = used === null ? null : Math.max(0, Math.min(100, used));
       const remaining = clampedUsed === null ? null : Math.max(0, Math.min(100, 100 - clampedUsed));
       const percentLabel = remaining === null ? '--' : `${Math.round(remaining)}%`;
-      const windowLabel = window.labelKey
-        ? t(window.labelKey, window.labelParams as Record<string, string | number>)
-        : window.label;
+      const windowLabel = resolveCodexWindowLabel(window, t);
       const resetLabel =
         typeof window.resetAt === 'number' && window.resetAt > 0
           ? formatCodexResetLabel({ reset_at: window.resetAt })

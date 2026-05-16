@@ -55,6 +55,49 @@
   }
 }
 
+.typeSummary {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 26px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 680;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 820;
+  }
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+.summaryWarning {
+  border-color: color-mix(in srgb, var(--quota-medium-color, #e0aa14) 42%, var(--border-color)) !important;
+  color: var(--quota-medium-color, #e0aa14) !important;
+}
+
+.summaryDanger {
+  border-color: color-mix(in srgb, var(--danger-color) 42%, var(--border-color)) !important;
+  color: var(--danger-color) !important;
+}
+
 .titleWrapper {
   display: flex;
   align-items: center;
@@ -635,6 +678,62 @@
   @include mobile {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+.quotaSearch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 220px;
+  min-width: 190px;
+  max-width: 320px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 72%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  color: var(--text-tertiary);
+
+  input {
+    min-width: 0;
+    width: 100%;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+
+    &::placeholder {
+      color: var(--text-tertiary);
+    }
+  }
+
+  button {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+
+    &:hover {
+      background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+      color: var(--text-primary);
+    }
+  }
+
+  &:focus-within {
+    border-color: color-mix(in srgb, var(--primary-color) 56%, var(--border-color));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
+  }
+
+  @include mobile {
+    max-width: none;
+    width: 100%;
   }
 }
 
