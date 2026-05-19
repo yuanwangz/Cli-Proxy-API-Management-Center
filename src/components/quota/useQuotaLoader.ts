@@ -43,6 +43,25 @@ const attachSnapshotMetadata = <TState,>(
   } as TState;
 };
 
+const attachRefreshMetadata = <TState,>(state: TState): TState => {
+  if (state === null || typeof state !== 'object') return state;
+  const record = state as Record<string, unknown>;
+  const refreshedAtMs = record.refreshedAtMs;
+  const refreshedAt = record.refreshedAt;
+  if (
+    (typeof refreshedAtMs === 'number' && Number.isFinite(refreshedAtMs) && refreshedAtMs > 0) ||
+    (typeof refreshedAt === 'string' && refreshedAt.trim())
+  ) {
+    return state;
+  }
+  const now = new Date();
+  return {
+    ...record,
+    refreshedAt: now.toISOString(),
+    refreshedAtMs: now.getTime(),
+  } as TState;
+};
+
 const saveQuotaSnapshot = async <TState, TData>(
   config: QuotaConfig<TState, TData>,
   file: AuthFileItem,
@@ -103,7 +122,11 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
               const data = await config.fetchQuota(file, t);
               const state = config.buildSuccessState(data);
               const persistedState = await saveQuotaSnapshot(config, file, state);
-              return { name: file.name, status: 'success', state: persistedState };
+              return {
+                name: file.name,
+                status: 'success',
+                state: attachRefreshMetadata(persistedState),
+              };
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : t('common.unknown_error');
               const errorStatus = getStatusFromError(err);
