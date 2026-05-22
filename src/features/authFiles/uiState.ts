@@ -1,11 +1,14 @@
 export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
+export const AUTH_FILES_STATUS_CODE_FILTERS = ['all', '401', '429'] as const;
 
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];
+export type AuthFilesStatusCodeFilter = (typeof AUTH_FILES_STATUS_CODE_FILTERS)[number];
 
 export type AuthFilesUiState = {
   filter?: string;
   problemOnly?: boolean;
   disabledOnly?: boolean;
+  statusCodeFilter?: AuthFilesStatusCodeFilter;
   compactMode?: boolean;
   search?: string;
   page?: number;
@@ -18,9 +21,16 @@ export type AuthFilesUiState = {
 const AUTH_FILES_UI_STATE_KEY = 'authFilesPage.uiState';
 const AUTH_FILES_COMPACT_MODE_KEY = 'authFilesPage.compactMode';
 const AUTH_FILES_SORT_MODE_SET = new Set<AuthFilesSortMode>(AUTH_FILES_SORT_MODES);
+const AUTH_FILES_STATUS_CODE_FILTER_SET = new Set<AuthFilesStatusCodeFilter>(
+  AUTH_FILES_STATUS_CODE_FILTERS
+);
 
 export const isAuthFilesSortMode = (value: unknown): value is AuthFilesSortMode =>
   typeof value === 'string' && AUTH_FILES_SORT_MODE_SET.has(value as AuthFilesSortMode);
+
+export const isAuthFilesStatusCodeFilter = (value: unknown): value is AuthFilesStatusCodeFilter =>
+  typeof value === 'string' &&
+  AUTH_FILES_STATUS_CODE_FILTER_SET.has(value as AuthFilesStatusCodeFilter);
 
 const readAuthFilesUiStateFromStorage = (
   storage: Pick<Storage, 'getItem'> | null | undefined

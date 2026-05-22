@@ -18,13 +18,23 @@ export type AuthFilesPrefixProxyEditorModalProps = {
   onClose: () => void;
   onCopyText: (text: string) => void | Promise<void>;
   onSave: () => void;
+  onRefreshCredential: () => void;
   onChange: (field: PrefixProxyEditorField, value: PrefixProxyEditorFieldValue) => void;
 };
 
 export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEditorModalProps) {
   const { t } = useTranslation();
-  const { disableControls, editor, updatedText, dirty, onClose, onCopyText, onSave, onChange } =
-    props;
+  const {
+    disableControls,
+    editor,
+    updatedText,
+    dirty,
+    onClose,
+    onCopyText,
+    onSave,
+    onRefreshCredential,
+    onChange,
+  } = props;
   const formatJsonText = (text: string) => {
     if (!text) return '';
     try {
@@ -49,6 +59,19 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
       }
       footer={
         <>
+          <Button
+            variant="secondary"
+            onClick={onRefreshCredential}
+            loading={editor?.refreshing === true}
+            disabled={
+              disableControls ||
+              editor?.loading === true ||
+              editor?.saving === true ||
+              editor?.refreshing === true
+            }
+          >
+            {t('auth_files.credential_refresh_button')}
+          </Button>
           <Button variant="secondary" onClick={onClose} disabled={editor?.saving === true}>
             {dirty ? t('common.cancel') : t('common.close')}
           </Button>

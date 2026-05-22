@@ -30,6 +30,7 @@ import {
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getAuthFileIcon,
+  getAuthFileStatusCode,
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusMessage,
@@ -51,11 +52,14 @@ import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAut
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
   isAuthFilesSortMode,
+  isAuthFilesStatusCodeFilter,
+  AUTH_FILES_STATUS_CODE_FILTERS,
   readAuthFilesUiState,
   readPersistedAuthFilesCompactMode,
   writeAuthFilesUiState,
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
+  type AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import styles from './AuthFilesPage.module.scss';
@@ -67,8 +71,7 @@ const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
 const DEFAULT_REGULAR_PAGE_SIZE = 9;
 const DEFAULT_COMPACT_PAGE_SIZE = 12;
 
-const escapeWildcardSearchSegment = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const buildWildcardSearch = (value: string): RegExp | null => {
   if (!value.includes('*')) return null;
@@ -88,6 +91,7 @@ export function AuthFilesPage() {
   const [filter, setFilter] = useState<'all' | string>('all');
   const [problemOnly, setProblemOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
+  const [statusCodeFilter, setStatusCodeFilter] = useState<AuthFilesStatusCodeFilter>('all');
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -171,6 +175,7 @@ export function AuthFilesPage() {
     closePrefixProxyEditor,
     handlePrefixProxyChange,
     handlePrefixProxySave,
+    handleCredentialRefresh,
   } = useAuthFilesPrefixProxyEditor({
     disableControls: connectionStatus !== 'connected',
     loadFiles,
@@ -202,10 +207,10 @@ export function AuthFilesPage() {
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
       }
-      if (
-        typeof persistedCompactMode !== 'boolean' &&
-        typeof persisted.compactMode === 'boolean'
-      ) {
+      if (isAuthFilesStatusCodeFilter(persisted.statusCodeFilter)) {
+        setStatusCodeFilter(persisted.statusCodeFilter);
+      }
+      if (typeof persistedCompactMode !== 'boolean' && typeof persisted.compactMode === 'boolean') {
         setCompactMode(persisted.compactMode);
       }
       if (typeof persisted.search === 'string') {
@@ -221,11 +226,11 @@ export function AuthFilesPage() {
       const regularPageSize =
         typeof persisted.regularPageSize === 'number' && Number.isFinite(persisted.regularPageSize)
           ? clampCardPageSize(persisted.regularPageSize)
-          : legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE);
       const compactPageSize =
         typeof persisted.compactPageSize === 'number' && Number.isFinite(persisted.compactPageSize)
           ? clampCardPageSize(persisted.compactPageSize)
-          : legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE;
+          : (legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE);
       setPageSizeByMode({
         regular: regularPageSize,
         compact: compactPageSize,
@@ -245,6 +250,7 @@ export function AuthFilesPage() {
       filter,
       problemOnly,
       disabledOnly,
+      statusCodeFilter,
       compactMode,
       search,
       page,
@@ -264,6 +270,7 @@ export function AuthFilesPage() {
     problemOnly,
     search,
     sortMode,
+    statusCodeFilter,
     uiStateHydrated,
   ]);
 
@@ -355,7 +362,7 @@ export function AuthFilesPage() {
     return Array.from(types);
   }, [files]);
 
-  const filesMatchingStatusFilters = useMemo(
+  const filesMatchingBaseStatusFilters = useMemo(
     () =>
       files.filter((file) => {
         if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
@@ -364,6 +371,28 @@ export function AuthFilesPage() {
       }),
     [disabledOnly, files, problemOnly]
   );
+
+  const statusCodeCounts = useMemo(() => {
+    const counts: Record<AuthFilesStatusCodeFilter, number> = {
+      all: filesMatchingBaseStatusFilters.length,
+      '401': 0,
+      '429': 0,
+    };
+    filesMatchingBaseStatusFilters.forEach((file) => {
+      const code = getAuthFileStatusCode(file);
+      if (code === 401) counts['401'] += 1;
+      if (code === 429) counts['429'] += 1;
+    });
+    return counts;
+  }, [filesMatchingBaseStatusFilters]);
+
+  const filesMatchingStatusFilters = useMemo(() => {
+    if (statusCodeFilter === 'all') return filesMatchingBaseStatusFilters;
+    const targetCode = Number(statusCodeFilter);
+    return filesMatchingBaseStatusFilters.filter(
+      (file) => getAuthFileStatusCode(file) === targetCode
+    );
+  }, [filesMatchingBaseStatusFilters, statusCodeFilter]);
 
   const sortOptions = useMemo(
     () => [
@@ -643,7 +672,7 @@ export function AuthFilesPage() {
   );
 
   const deleteAllButtonLabel = (() => {
-    if (disabledOnly) {
+    if (disabledOnly || statusCodeFilter !== 'all') {
       return t('auth_files.delete_filtered_result_button');
     }
     if (problemOnly) {
@@ -688,9 +717,11 @@ export function AuthFilesPage() {
                   filter,
                   problemOnly,
                   disabledOnly,
+                  statusCodeFilter,
                   onResetFilterToAll: () => setFilter('all'),
                   onResetProblemOnly: () => setProblemOnly(false),
                   onResetDisabledOnly: () => setDisabledOnly(false),
+                  onResetStatusCodeFilter: () => setStatusCodeFilter('all'),
                 })
               }
               disabled={disableControls || loading || deletingAll}
@@ -758,6 +789,32 @@ export function AuthFilesPage() {
                     ariaLabel={t('auth_files.sort_label')}
                     fullWidth
                   />
+                </div>
+                <div className={`${styles.filterItem} ${styles.statusCodeFilterItem}`}>
+                  <label>{t('auth_files.status_code_filter_label')}</label>
+                  <div className={styles.statusCodeFilterGroup}>
+                    {AUTH_FILES_STATUS_CODE_FILTERS.map((value) => {
+                      const active = statusCodeFilter === value;
+                      const labelKey =
+                        value === 'all'
+                          ? 'auth_files.status_code_filter_all'
+                          : `auth_files.status_code_filter_${value}`;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`${styles.statusCodeFilterButton} ${active ? styles.statusCodeFilterButtonActive : ''}`}
+                          onClick={() => {
+                            setStatusCodeFilter(value);
+                            setPage(1);
+                          }}
+                        >
+                          <span>{t(labelKey)}</span>
+                          <strong>{statusCodeCounts[value]}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className={`${styles.filterItem} ${styles.filterToggleItem}`}>
                   <label>{t('auth_files.display_options_label')}</label>
@@ -920,6 +977,7 @@ export function AuthFilesPage() {
         onClose={closePrefixProxyEditor}
         onCopyText={copyTextWithNotification}
         onSave={handlePrefixProxySave}
+        onRefreshCredential={handleCredentialRefresh}
         onChange={handlePrefixProxyChange}
       />
 

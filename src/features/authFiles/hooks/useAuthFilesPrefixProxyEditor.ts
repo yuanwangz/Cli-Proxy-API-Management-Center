@@ -23,6 +23,7 @@ export type PrefixProxyEditorState = {
   fileInfoText: string;
   loading: boolean;
   saving: boolean;
+  refreshing: boolean;
   error: string | null;
   originalText: string;
   rawText: string;
@@ -54,6 +55,7 @@ export type UseAuthFilesPrefixProxyEditorResult = {
     value: PrefixProxyEditorFieldValue
   ) => void;
   handlePrefixProxySave: () => Promise<void>;
+  handleCredentialRefresh: () => Promise<void>;
 };
 
 const isRecordObject = (value: unknown): value is Record<string, unknown> =>
@@ -344,6 +346,7 @@ export function useAuthFilesPrefixProxyEditor(
       fileInfoText: JSON.stringify(file, null, 2),
       loading: true,
       saving: false,
+      refreshing: false,
       error: null,
       originalText: '',
       rawText: '',
@@ -492,6 +495,40 @@ export function useAuthFilesPrefixProxyEditor(
     }
   };
 
+  const handleCredentialRefresh = async () => {
+    if (!prefixProxyEditor || disableControls || prefixProxyEditor.refreshing) return;
+
+    const name = prefixProxyEditor.fileName;
+    setPrefixProxyEditor((prev) => {
+      if (!prev || prev.fileName !== name) return prev;
+      return { ...prev, refreshing: true, error: null };
+    });
+
+    try {
+      const result = await authFilesApi.refreshCredential(name);
+      showNotification(t('auth_files.credential_refresh_success', { name }), 'success');
+      await loadFiles();
+      setPrefixProxyEditor((prev) => {
+        if (!prev || prev.fileName !== name) return prev;
+        return {
+          ...prev,
+          refreshing: false,
+          fileInfoText: result.file ? JSON.stringify(result.file, null, 2) : prev.fileInfoText,
+        };
+      });
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
+      showNotification(
+        t('auth_files.credential_refresh_failed', { name, message: errorMessage }),
+        'error'
+      );
+      setPrefixProxyEditor((prev) => {
+        if (!prev || prev.fileName !== name) return prev;
+        return { ...prev, refreshing: false, error: errorMessage };
+      });
+    }
+  };
+
   return {
     prefixProxyEditor,
     prefixProxyUpdatedText,
@@ -500,5 +537,6 @@ export function useAuthFilesPrefixProxyEditor(
     closePrefixProxyEditor,
     handlePrefixProxyChange,
     handlePrefixProxySave,
+    handleCredentialRefresh,
   };
 }
