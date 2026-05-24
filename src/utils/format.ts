@@ -1,10 +1,8 @@
 import { parseTimestamp } from './timestamp';
 
 /**
- * 格式化工具函数
- * 从原项目 src/utils/string.js 迁移
+ * Formatting utilities migrated from the original src/utils/string.js.
  */
-
 const resolveDefaultLocale = (): string | undefined => {
   const fromDocument =
     typeof document !== 'undefined' ? document.documentElement?.lang?.trim() : '';
@@ -14,7 +12,7 @@ const resolveDefaultLocale = (): string | undefined => {
 };
 
 /**
- * 隐藏 API Key 中间部分，仅保留前后两位
+ * Masks the middle of an API key while keeping a small prefix and suffix visible.
  */
 export function maskApiKey(key: string): string {
   const trimmed = String(key || '').trim();
@@ -33,7 +31,7 @@ export function maskApiKey(key: string): string {
 }
 
 /**
- * 格式化文件大小
+ * Formats a byte count using binary units.
  */
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -46,28 +44,7 @@ export function formatFileSize(bytes: number): string {
 }
 
 /**
- * 格式化日期时间
- */
-export function formatDateTime(date: string | Date, locale?: string): string {
-  const d = typeof date === 'string' ? parseTimestamp(date) ?? new Date(date) : date;
-
-  if (isNaN(d.getTime())) {
-    return 'Invalid Date';
-  }
-
-  const resolvedLocale = locale?.trim() || resolveDefaultLocale();
-  return d.toLocaleString(resolvedLocale, {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-}
-
-/**
- * 将 Unix 时间戳（秒/毫秒/微秒/纳秒）格式化为本地时间字符串
+ * Formats Unix timestamps in seconds, milliseconds, microseconds, or nanoseconds.
  */
 export function formatUnixTimestamp(value: unknown, locale?: string): string {
   if (value === null || value === undefined || value === '') return '';
@@ -80,16 +57,16 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
 
     const abs = Math.abs(asNumber);
 
-    // 秒：常见 10 位（~1e9）
+    // Seconds: common 10-digit values around 1e9.
     if (abs < 1e11) return new Date(asNumber * 1000);
 
-    // 毫秒：常见 13 位（~1e12）
+    // Milliseconds: common 13-digit values around 1e12.
     if (abs < 1e14) return new Date(asNumber);
 
-    // 微秒：常见 16 位（~1e15）
+    // Microseconds: common 16-digit values around 1e15.
     if (abs < 1e17) return new Date(Math.round(asNumber / 1000));
 
-    // 纳秒：常见 19 位（~1e18）
+    // Nanoseconds: common 19-digit values around 1e18.
     return new Date(Math.round(asNumber / 1e6));
   })();
 
@@ -98,19 +75,9 @@ export function formatUnixTimestamp(value: unknown, locale?: string): string {
 }
 
 /**
- * 格式化数字（添加千位分隔符）
+ * Formats numbers with locale-aware grouping.
  */
 export function formatNumber(num: number, locale?: string): string {
   const resolvedLocale = locale?.trim() || resolveDefaultLocale();
   return num.toLocaleString(resolvedLocale);
-}
-
-/**
- * 截断长文本
- */
-export function truncateText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) {
-    return text;
-  }
-  return text.slice(0, maxLength) + '...';
 }

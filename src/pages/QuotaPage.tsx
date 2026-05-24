@@ -13,7 +13,8 @@ import {
   CLAUDE_CONFIG,
   CODEX_CONFIG,
   GEMINI_CLI_CONFIG,
-  KIMI_CONFIG
+  KIMI_CONFIG,
+  XAI_CONFIG,
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
 import type { QuotaSnapshotsPayload } from '@/types/quota';
@@ -129,6 +130,12 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+      />
+      <QuotaSection
+        config={XAI_CONFIG}
+        files={files}
+        loading={loading}
+        disabled={disableControls}
       />
       <QuotaSection
         config={GEMINI_CLI_CONFIG}

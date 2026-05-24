@@ -324,6 +324,45 @@ export interface KimiQuotaState {
   errorStatus?: number;
 }
 
+// xAI/Grok API payload types
+export interface XaiBillingCent {
+  val?: number | string;
+}
+
+export interface XaiBillingConfig {
+  monthlyLimit?: XaiBillingCent | number | string | null;
+  monthly_limit?: XaiBillingCent | number | string | null;
+  used?: XaiBillingCent | number | string | null;
+  onDemandCap?: XaiBillingCent | number | string | null;
+  on_demand_cap?: XaiBillingCent | number | string | null;
+  billingPeriodStart?: string;
+  billing_period_start?: string;
+  billingPeriodEnd?: string;
+  billing_period_end?: string;
+}
+
+export interface XaiBillingPayload {
+  config?: XaiBillingConfig | null;
+}
+
+export interface XaiBillingSummary {
+  monthlyLimitCents: number | null;
+  usedCents: number | null;
+  onDemandCapCents: number | null;
+  billingPeriodStart?: string;
+  billingPeriodEnd?: string;
+  usedPercent: number | null;
+}
+
+export interface XaiQuotaState {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  billing: XaiBillingSummary | null;
+  refreshedAt?: string;
+  refreshedAtMs?: number;
+  error?: string;
+  errorStatus?: number;
+}
+
 export interface QuotaSnapshotRecord {
   provider: string;
   auth_id?: string;
