@@ -135,13 +135,13 @@
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
 .filterTag {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 7px 12px 7px 8px;
   border-radius: 8px;
   font-size: 13px;
@@ -450,6 +450,451 @@
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 12%, transparent);
+  }
+}
+
+.authWorkbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 78%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-secondary) 48%, var(--bg-primary));
+
+  @include tablet {
+    grid-template-columns: 1fr;
+  }
+}
+
+.authWorkbenchMain {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.authWorkbenchStats,
+.inspectionSummary,
+.authWorkbenchActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.authWorkbenchStats {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+
+  span,
+  strong {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 8px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--bg-primary) 76%, transparent);
+    white-space: nowrap;
+  }
+
+  strong {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--bg-primary));
+  }
+}
+
+.inspectionSummary {
+  gap: 6px;
+}
+
+.inspectionSummaryItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 70%, transparent);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 720;
+  white-space: nowrap;
+
+  strong {
+    color: var(--text-primary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.authWorkbenchActions {
+  justify-content: flex-end;
+
+  :global(.btn.btn-sm) {
+    min-width: 0;
+  }
+
+  @include tablet {
+    justify-content: flex-start;
+  }
+}
+
+.autoInspectionToggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+}
+
+.authTableShell {
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+}
+
+.authTable {
+  min-width: 1000px;
+}
+
+.authTableHeader,
+.authTableRow {
+  display: grid;
+  grid-template-columns:
+    32px
+    minmax(220px, 1.45fr)
+    minmax(120px, 0.62fr)
+    minmax(160px, 0.82fr)
+    minmax(120px, 0.62fr)
+    minmax(110px, 0.52fr)
+    minmax(198px, 0.82fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.authTableHeader {
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 80%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 76%, transparent);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.authTableRow {
+  min-height: 70px;
+  padding: 8px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+  background: color-mix(in srgb, var(--bg-primary) 96%, transparent);
+  transition:
+    background $transition-fast,
+    border-color $transition-fast;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary));
+  }
+}
+
+.authTableShellCompact {
+  .authTableRow {
+    min-height: 52px;
+    padding-block: 5px;
+  }
+
+  .authCredentialSub,
+  .authStatusMessage,
+  .authMetaCell span:first-child {
+    display: none;
+  }
+
+  .providerAvatarSmall {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+.authTableRowSelected {
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-primary));
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--primary-color) 72%, transparent);
+}
+
+.authTableRowDisabled {
+  color: var(--text-tertiary);
+
+  .authCredentialCell,
+  .authStatusCell,
+  .authActivityCell,
+  .authInspectionCell,
+  .authMetaCell {
+    opacity: 0.72;
+  }
+}
+
+.authTableSelectCell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.authCredentialCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.providerAvatarSmall {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 58%, transparent);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.providerAvatarSmallImage {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.authCredentialText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.authCredentialBadges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.priorityInline {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--bg-tertiary) 70%, transparent);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.authCredentialName {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.authCredentialSub {
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.authStatusCell,
+.authInspectionCell,
+.authMetaCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.statusCodePill {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+  color: var(--danger-color);
+  font-size: 10px;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.authStatusMessage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  color: var(--warning-text);
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  svg {
+    flex: 0 0 auto;
+  }
+}
+
+.authActivityCell {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+
+  .statusBar {
+    gap: 7px;
+  }
+
+  .statusBlocks {
+    min-width: 86px;
+  }
+
+  .statusRate {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+}
+
+.authStatsLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 720;
+
+  .statSuccess,
+  .statFailure {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+  }
+}
+
+.inspectionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 760;
+
+  span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  strong {
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.inspectionIdle,
+.inspectionUnsupported {
+  border-color: color-mix(in srgb, var(--border-color) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+  color: var(--text-tertiary);
+}
+
+.inspectionChecking {
+  border-color: color-mix(in srgb, var(--primary-color) 32%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--primary-color);
+}
+
+.inspectionHealthy {
+  border-color: color-mix(in srgb, var(--success-color, #22c55e) 34%, transparent);
+  background: color-mix(in srgb, var(--success-badge-bg, #d1fae5) 54%, transparent);
+  color: var(--success-badge-text, #065f46);
+}
+
+.inspectionLimited {
+  border-color: color-mix(in srgb, var(--quota-medium-color, #e0aa14) 42%, transparent);
+  background: color-mix(in srgb, var(--warning-bg) 62%, transparent);
+  color: var(--warning-text);
+}
+
+.inspectionDisabled,
+.inspectionError {
+  border-color: color-mix(in srgb, var(--danger-color) 36%, transparent);
+  background: color-mix(in srgb, var(--danger-color) 10%, transparent);
+  color: var(--danger-color);
+}
+
+.inspectionTime {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.authMetaCell {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.25;
+
+  span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.authActionsCell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 0;
+
+  :global(.btn.btn-sm) {
+    min-width: 28px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+  }
+
+  :global(svg) {
+    display: block;
   }
 }
 

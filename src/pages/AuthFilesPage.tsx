@@ -27,7 +27,6 @@ import { copyToClipboard } from '@/utils/clipboard';
 import {
   MAX_CARD_PAGE_SIZE,
   MIN_CARD_PAGE_SIZE,
-  QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
   getAuthFileIcon,
   getAuthFileStatusCode,
@@ -37,14 +36,14 @@ import {
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
-  type QuotaProviderType,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
-import { AuthFileCard } from '@/features/authFiles/components/AuthFileCard';
+import { AuthFileTable } from '@/features/authFiles/components/AuthFileTable';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
+import { useCredentialInspection } from '@/features/authFiles/hooks/useCredentialInspection';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -68,8 +67,9 @@ const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
 const easePower2In = (progress: number) => progress ** 3;
 const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
-const DEFAULT_REGULAR_PAGE_SIZE = 9;
-const DEFAULT_COMPACT_PAGE_SIZE = 12;
+const DEFAULT_REGULAR_PAGE_SIZE = 50;
+const DEFAULT_COMPACT_PAGE_SIZE = 100;
+const AUTO_INSPECTION_INTERVAL_MS = 15 * 60 * 1000;
 
 const escapeWildcardSearchSegment = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -99,9 +99,10 @@ export function AuthFilesPage() {
     regular: DEFAULT_REGULAR_PAGE_SIZE,
     compact: DEFAULT_COMPACT_PAGE_SIZE,
   });
-  const [pageSizeInput, setPageSizeInput] = useState('9');
+  const [pageSizeInput, setPageSizeInput] = useState(String(DEFAULT_REGULAR_PAGE_SIZE));
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
+  const [autoInspection, setAutoInspection] = useState(false);
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
@@ -130,12 +131,21 @@ export function AuthFilesPage() {
     handleStatusToggle,
     toggleSelect,
     selectAllVisible,
+    deselectVisible,
     invertVisibleSelection,
     deselectAll,
     batchDownload,
     batchSetStatus,
     batchDelete,
   } = useAuthFilesData();
+
+  const {
+    resultsByName: inspectionResults,
+    summary: inspectionSummary,
+    running: inspectionRunning,
+    progress: inspectionProgress,
+    runInspection,
+  } = useCredentialInspection();
 
   const statusBarCache = useAuthFilesStatusBarCache(files);
 
@@ -183,11 +193,6 @@ export function AuthFilesPage() {
 
   const disableControls = connectionStatus !== 'connected';
   const normalizedFilter = normalizeProviderKey(String(filter));
-  const quotaFilterType: QuotaProviderType | null = QUOTA_PROVIDER_TYPES.has(
-    normalizedFilter as QuotaProviderType
-  )
-    ? (normalizedFilter as QuotaProviderType)
-    : null;
   const pageSize = compactMode ? pageSizeByMode.compact : pageSizeByMode.regular;
 
   useEffect(() => {
@@ -478,6 +483,75 @@ export function AuthFilesPage() {
     selectedNames.length === 0 ||
     batchStatusUpdating ||
     selectedHasStatusUpdating;
+  const selectedItems = useMemo(() => {
+    if (selectedNames.length === 0) return [];
+    const selectedNameSet = new Set(selectedNames);
+    return files.filter((file) => selectedNameSet.has(file.name));
+  }, [files, selectedNames]);
+  const inspectionBusyLabel =
+    inspectionProgress.total > 0
+      ? t('auth_files.inspection_progress', {
+          completed: inspectionProgress.completed,
+          total: inspectionProgress.total,
+        })
+      : t('auth_files.inspection_running');
+
+  const inspectTargets = useCallback(
+    async (
+      targets: typeof files,
+      scope: 'row' | 'page' | 'filtered' | 'selected' | 'auto',
+      silent = false
+    ) => {
+      if (disableControls || inspectionRunning) return;
+      if (targets.length === 0) {
+        if (!silent) {
+          showNotification(t('auth_files.inspection_empty'), 'info');
+        }
+        return;
+      }
+
+      const summary = await runInspection(targets, scope);
+      await loadFiles();
+
+      if (silent) return;
+      const variant =
+        summary.error > 0 || summary.disabled > 0
+          ? 'warning'
+          : summary.limited > 0 || summary.unsupported > 0
+            ? 'info'
+            : 'success';
+      showNotification(
+        t('auth_files.inspection_finished', {
+          total: summary.total,
+          healthy: summary.healthy,
+          limited: summary.limited,
+          disabled: summary.disabled,
+          error: summary.error,
+          unsupported: summary.unsupported,
+        }),
+        variant
+      );
+    },
+    [disableControls, inspectionRunning, loadFiles, runInspection, showNotification, t]
+  );
+
+  const handleAutoInspectionChange = useCallback(
+    (enabled: boolean) => {
+      setAutoInspection(enabled);
+      if (enabled) {
+        void inspectTargets(pageItems, 'auto');
+      }
+    },
+    [inspectTargets, pageItems]
+  );
+
+  useInterval(
+    () => {
+      if (!autoInspection || inspectionRunning || disableControls) return;
+      void inspectTargets(pageItems, 'auto', true);
+    },
+    isCurrentLayer && autoInspection ? AUTO_INSPECTION_INTERVAL_MS : null
+  );
 
   const copyTextWithNotification = useCallback(
     async (text: string) => {
@@ -866,6 +940,103 @@ export function AuthFilesPage() {
               </div>
             </div>
 
+            <div className={styles.authWorkbench}>
+              <div className={styles.authWorkbenchMain}>
+                <div className={styles.authWorkbenchStats}>
+                  <span>
+                    {t('auth_files.workbench_visible', {
+                      count: pageItems.length,
+                      total: sorted.length,
+                    })}
+                  </span>
+                  <span>
+                    {t('auth_files.workbench_selected', {
+                      count: selectionCount,
+                    })}
+                  </span>
+                  {inspectionRunning && <strong>{inspectionBusyLabel}</strong>}
+                </div>
+                <div className={styles.inspectionSummary}>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_healthy')}
+                    <strong>{inspectionSummary.healthy}</strong>
+                  </span>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_limited')}
+                    <strong>{inspectionSummary.limited}</strong>
+                  </span>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_disabled')}
+                    <strong>{inspectionSummary.disabled}</strong>
+                  </span>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_error')}
+                    <strong>{inspectionSummary.error}</strong>
+                  </span>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_unsupported')}
+                    <strong>{inspectionSummary.unsupported}</strong>
+                  </span>
+                </div>
+              </div>
+              <div className={styles.authWorkbenchActions}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => selectAllVisible(pageItems)}
+                  disabled={selectablePageItems.length === 0}
+                >
+                  {t('auth_files.batch_select_page')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => selectAllVisible(sorted)}
+                  disabled={selectableFilteredItems.length === 0}
+                >
+                  {t('auth_files.batch_select_filtered')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => invertVisibleSelection(pageItems)}
+                  disabled={selectablePageItems.length === 0}
+                >
+                  {t('auth_files.batch_invert_page')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void inspectTargets(pageItems, 'page')}
+                  disabled={disableControls || inspectionRunning || pageItems.length === 0}
+                  loading={inspectionRunning}
+                >
+                  {t('auth_files.inspection_page_button')}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void inspectTargets(sorted, 'filtered')}
+                  disabled={disableControls || inspectionRunning || sorted.length === 0}
+                >
+                  {t('auth_files.inspection_filtered_button')}
+                </Button>
+                <div className={styles.autoInspectionToggle}>
+                  <ToggleSwitch
+                    checked={autoInspection}
+                    onChange={handleAutoInspectionChange}
+                    ariaLabel={t('auth_files.inspection_auto_toggle')}
+                    disabled={disableControls || inspectionRunning}
+                    label={
+                      <span className={styles.filterToggleLabel}>
+                        {t('auth_files.inspection_auto_toggle')}
+                      </span>
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+
             {loading ? (
               <div className={styles.hint}>{t('common.loading')}</div>
             ) : pageItems.length === 0 ? (
@@ -874,30 +1045,27 @@ export function AuthFilesPage() {
                 description={t('auth_files.search_empty_desc')}
               />
             ) : (
-              <div
-                className={`${styles.fileGrid} ${quotaFilterType ? styles.fileGridQuotaManaged : ''} ${compactMode ? styles.fileGridCompact : ''}`}
-              >
-                {pageItems.map((file) => (
-                  <AuthFileCard
-                    key={file.name}
-                    file={file}
-                    compact={compactMode}
-                    selected={selectedFiles.has(file.name)}
-                    resolvedTheme={resolvedTheme}
-                    disableControls={disableControls}
-                    deleting={deleting}
-                    statusUpdating={statusUpdating}
-                    quotaFilterType={quotaFilterType}
-                    statusBarCache={statusBarCache}
-                    onShowModels={showModels}
-                    onDownload={handleDownload}
-                    onOpenPrefixProxyEditor={openPrefixProxyEditor}
-                    onDelete={handleDelete}
-                    onToggleStatus={handleStatusToggle}
-                    onToggleSelect={toggleSelect}
-                  />
-                ))}
-              </div>
+              <AuthFileTable
+                files={pageItems}
+                compact={compactMode}
+                selectedFiles={selectedFiles}
+                resolvedTheme={resolvedTheme}
+                disableControls={disableControls}
+                deleting={deleting}
+                statusUpdating={statusUpdating}
+                statusBarCache={statusBarCache}
+                inspectionResults={inspectionResults}
+                inspectionRunning={inspectionRunning}
+                onShowModels={showModels}
+                onDownload={handleDownload}
+                onOpenPrefixProxyEditor={openPrefixProxyEditor}
+                onDelete={handleDelete}
+                onToggleStatus={handleStatusToggle}
+                onToggleSelect={toggleSelect}
+                onSelectPage={selectAllVisible}
+                onDeselectPage={deselectVisible}
+                onInspectOne={(file) => void inspectTargets([file], 'row')}
+              />
             )}
 
             {!loading && sorted.length > pageSize && (
@@ -1018,6 +1186,15 @@ export function AuthFilesPage() {
                   </Button>
                 </div>
                 <div className={styles.batchActionRight}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void inspectTargets(selectedItems, 'selected')}
+                    disabled={disableControls || inspectionRunning || selectedItems.length === 0}
+                    loading={inspectionRunning}
+                  >
+                    {t('auth_files.inspection_selected_button')}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"
