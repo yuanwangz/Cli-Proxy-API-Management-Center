@@ -121,6 +121,7 @@ interface QuotaSectionProps<TState extends QuotaStatusState, TData> {
   disabled: boolean;
   snapshots?: QuotaSnapshotRecord[];
   tokenUsage?: Record<string, CredentialTokenUsage>;
+  onQuotaRefreshComplete?: () => void | Promise<void>;
 }
 
 const resolveAuthIndex = (file: AuthFileItem): string => {
@@ -317,7 +318,8 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   loading,
   disabled,
   snapshots = [],
-  tokenUsage = {}
+  tokenUsage = {},
+  onQuotaRefreshComplete
 }: QuotaSectionProps<TState, TData>) {
   const { t } = useTranslation();
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -390,6 +392,14 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     loadingScope,
     setLoading
   } = useQuotaPagination(displayFiles);
+
+  const refreshQuotaTargets = useCallback(
+    async (targets: AuthFileItem[], scope: QuotaScope) => {
+      await loadQuota(targets, scope, setLoading);
+      await onQuotaRefreshComplete?.();
+    },
+    [loadQuota, onQuotaRefreshComplete, setLoading]
+  );
 
   const visibleKeys = useMemo(() => pageItems.map(itemKey), [pageItems]);
 
@@ -506,12 +516,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   useEffect(() => {
     if (disabled || loading || sectionLoading || expiredVisibleRefreshes.length === 0) return;
 
-    void loadQuota(
+    void refreshQuotaTargets(
       expiredVisibleRefreshes.map((entry) => entry.file),
-      'page',
-      setLoading
+      'page'
     );
-  }, [disabled, expiredVisibleRefreshes, loadQuota, loading, sectionLoading, setLoading]);
+  }, [disabled, expiredVisibleRefreshes, loading, refreshQuotaTargets, sectionLoading]);
 
   const handleAvailabilityChange = useCallback(
     (value: AvailabilityFilter) => {
@@ -567,8 +576,8 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   const refreshSelected = useCallback(() => {
     if (disabled || sectionLoading || selectedTargets.length === 0) return;
-    loadQuota(selectedTargets, 'selected', setLoading);
-  }, [disabled, loadQuota, sectionLoading, selectedTargets, setLoading]);
+    void refreshQuotaTargets(selectedTargets, 'selected');
+  }, [disabled, refreshQuotaTargets, sectionLoading, selectedTargets]);
 
   const titleNode = (
     <div className={styles.titleWrapper}>

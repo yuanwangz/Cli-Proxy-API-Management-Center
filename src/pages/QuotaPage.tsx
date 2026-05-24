@@ -73,6 +73,10 @@ export function QuotaPage() {
 
   useHeaderRefresh(handleHeaderRefresh);
 
+  const handleQuotaRefreshComplete = useCallback(async () => {
+    await Promise.all([loadFiles(), loadQuotaSnapshots()]);
+  }, [loadFiles, loadQuotaSnapshots]);
+
   useEffect(() => {
     loadFiles();
     loadConfig();
@@ -114,6 +118,7 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
         config={ANTIGRAVITY_CONFIG}
@@ -122,6 +127,7 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
         config={CODEX_CONFIG}
@@ -130,12 +136,14 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
         config={XAI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
         config={GEMINI_CLI_CONFIG}
@@ -144,6 +152,7 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
         config={KIMI_CONFIG}
@@ -152,6 +161,7 @@ export function QuotaPage() {
         disabled={disableControls}
         snapshots={snapshots}
         tokenUsage={tokenUsage}
+        onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
     </div>
   );
