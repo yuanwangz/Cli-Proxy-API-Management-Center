@@ -268,7 +268,7 @@ export function MainLayout() {
           ? t('common.error')
           : t('common.disconnected_status');
 
-  // 将顶部悬浮控制区高度写入 CSS 变量，供移动端粘性元素和浮层避让。
+  // Store the floating header height for mobile sticky elements and overlays.
   useLayoutEffect(() => {
     const updateHeaderHeight = () => {
       const height = headerRef.current?.offsetHeight;
@@ -297,7 +297,7 @@ export function MainLayout() {
     };
   }, []);
 
-  // 将主内容区的中心点写入 CSS 变量，供底部浮层（配置面板操作栏、提供商导航）对齐到内容区
+  // Store the content center so bottom overlays align with the main content area.
   useLayoutEffect(() => {
     const updateContentCenter = () => {
       const el = contentRef.current;
@@ -412,23 +412,95 @@ export function MainLayout() {
 
   useEffect(() => {
     fetchConfig().catch(() => {
-      // ignore initial failure; login flow会提示
+      // Ignore initial failure; the login flow surfaces it.
     });
   }, [fetchConfig]);
 
-  const navItems = [
-    { path: '/', label: t('nav.dashboard'), icon: sidebarIcons.dashboard },
-    { path: '/config', label: t('nav.config_management'), icon: sidebarIcons.config },
-    { path: '/ai-providers', label: t('nav.ai_providers'), icon: sidebarIcons.aiProviders },
-    { path: '/auth-files', label: t('nav.auth_files'), icon: sidebarIcons.authFiles },
-    { path: '/oauth', label: t('nav.oauth', { defaultValue: 'OAuth' }), icon: sidebarIcons.oauth },
-    { path: '/quota', label: t('nav.quota_management'), icon: sidebarIcons.quota },
-    { path: '/usage', label: t('nav.usage_analytics', { defaultValue: '使用统计' }), icon: sidebarIcons.usage },
-    ...(config?.loggingToFile
-      ? [{ path: '/logs', label: t('nav.logs'), icon: sidebarIcons.logs }]
-      : []),
-    { path: '/system', label: t('nav.system_info'), icon: sidebarIcons.system },
+  const navGroups = [
+    {
+      id: 'operate',
+      labelKey: 'nav_groups.operate',
+      items: [
+        {
+          path: '/',
+          labelKey: 'nav.dashboard',
+          metaKey: 'nav_meta.dashboard',
+          icon: sidebarIcons.dashboard,
+        },
+      ],
+    },
+    {
+      id: 'gateway',
+      labelKey: 'nav_groups.gateway',
+      items: [
+        {
+          path: '/ai-providers',
+          labelKey: 'nav.ai_providers',
+          metaKey: 'nav_meta.ai_providers',
+          icon: sidebarIcons.aiProviders,
+        },
+        {
+          path: '/auth-files',
+          labelKey: 'nav.auth_files',
+          metaKey: 'nav_meta.auth_files',
+          icon: sidebarIcons.authFiles,
+        },
+        {
+          path: '/oauth',
+          labelKey: 'nav.oauth',
+          metaKey: 'nav_meta.oauth',
+          icon: sidebarIcons.oauth,
+        },
+      ],
+    },
+    {
+      id: 'observe',
+      labelKey: 'nav_groups.observe',
+      items: [
+        {
+          path: '/quota',
+          labelKey: 'nav.quota_management',
+          metaKey: 'nav_meta.quota_management',
+          icon: sidebarIcons.quota,
+        },
+        {
+          path: '/usage',
+          labelKey: 'nav.usage_analytics',
+          metaKey: 'nav_meta.usage_analytics',
+          icon: sidebarIcons.usage,
+        },
+        ...(config?.loggingToFile
+          ? [
+              {
+                path: '/logs',
+                labelKey: 'nav.logs',
+                metaKey: 'nav_meta.logs',
+                icon: sidebarIcons.logs,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      id: 'control',
+      labelKey: 'nav_groups.control',
+      items: [
+        {
+          path: '/config',
+          labelKey: 'nav.config_management',
+          metaKey: 'nav_meta.config_management',
+          icon: sidebarIcons.config,
+        },
+        {
+          path: '/system',
+          labelKey: 'nav.system_info',
+          metaKey: 'nav_meta.system_info',
+          icon: sidebarIcons.system,
+        },
+      ],
+    },
   ];
+  const navItems = navGroups.flatMap((group) => group.items);
   const navOrder = navItems.map((item) => item.path);
   const getRouteOrder = (pathname: string) => {
     const trimmedPath =
@@ -690,17 +762,32 @@ export function MainLayout() {
           </div>
 
           <div className="nav-section">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => setSidebarOpen(false)}
-                title={showSidebarLabels ? undefined : item.label}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                {showSidebarLabels && <span className="nav-label">{item.label}</span>}
-              </NavLink>
+            {navGroups.map((group, idx) => (
+              <div className="nav-group" key={group.id}>
+                {showSidebarLabels
+                  ? <div className="nav-group-label">{t(group.labelKey)}</div>
+                  : idx > 0 && <div className="nav-group-divider" aria-hidden="true" />}
+                {group.items.map((item) => {
+                  const itemLabel = t(item.labelKey);
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                      onClick={() => setSidebarOpen(false)}
+                      title={showSidebarLabels ? undefined : itemLabel}
+                    >
+                      <span className="nav-icon">{item.icon}</span>
+                      {showSidebarLabels && (
+                        <span className="nav-text">
+                          <span className="nav-label">{itemLabel}</span>
+                          <span className="nav-meta">{t(item.metaKey)}</span>
+                        </span>
+                      )}
+                    </NavLink>
+                  );
+                })}
+              </div>
             ))}
           </div>
 
