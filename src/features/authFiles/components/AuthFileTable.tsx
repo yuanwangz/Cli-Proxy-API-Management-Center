@@ -24,6 +24,7 @@ import {
   statusBarDataFromRecentRequests,
 } from '@/utils/recentRequests';
 import {
+  formatCreated,
   formatModified,
   getAuthFileIcon,
   getAuthFileStatusCode,
@@ -293,7 +294,12 @@ export function AuthFileTable({
 
               <div className={styles.authMetaCell}>
                 <span>{file.size ? formatFileSize(file.size) : '-'}</span>
-                <span>{formatModified(file)}</span>
+                <span title={`${t('auth_files.file_created')}: ${formatCreated(file)}`}>
+                  {t('auth_files.file_created_short')} {formatCreated(file)}
+                </span>
+                <span title={`${t('auth_files.file_modified')}: ${formatModified(file)}`}>
+                  {t('auth_files.file_modified_short')} {formatModified(file)}
+                </span>
               </div>
 
               <div className={styles.authActionsCell}>
