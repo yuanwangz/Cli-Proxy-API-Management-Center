@@ -114,33 +114,33 @@ const normalizeBatchUploadResponse = (
   requestedNames: string[]
 ): AuthFileBatchUploadResult => {
   const failed = normalizeBatchFailures(payload?.failed);
-  const uploadedFilesFromPayload = normalizeBatchFileNames(payload?.files);
+  const filesFromPayload = normalizeBatchFileNames(payload?.files);
+  // Backend single-file success path returns only {status:"ok"} (auth_files.go:680).
+  // Derive count + names from the request when no failures and counts are absent.
+  const inferFromRequest = payload?.uploaded === undefined && failed.length === 0;
+  const derivedFiles = deriveSuccessfulFileNames(requestedNames, failed);
   const uploaded =
     typeof payload?.uploaded === 'number'
       ? payload.uploaded
-      : uploadedFilesFromPayload.length > 0
-        ? uploadedFilesFromPayload.length
-        : requestedNames.length === 1 && failed.length === 0
-          ? 1
+      : filesFromPayload.length > 0
+        ? filesFromPayload.length
+        : inferFromRequest
+          ? requestedNames.length
           : 0;
-
-  let uploadedFiles = uploadedFilesFromPayload;
-  if (uploadedFiles.length === 0 && uploaded > 0) {
-    if (failed.length === 0 && uploaded === requestedNames.length) {
-      uploadedFiles = [...requestedNames];
-    } else {
-      const derivedNames = deriveSuccessfulFileNames(requestedNames, failed);
-      if (derivedNames.length === uploaded) {
-        uploadedFiles = derivedNames;
-      }
-    }
-  }
+  const files =
+    filesFromPayload.length > 0
+      ? filesFromPayload
+      : inferFromRequest
+        ? [...requestedNames]
+        : uploaded > 0 && derivedFiles.length === uploaded
+          ? derivedFiles
+          : [];
 
   return {
     status:
       typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
     uploaded,
-    files: uploadedFiles,
+    files,
     failed,
   };
 };
@@ -150,33 +150,32 @@ const normalizeBatchDeleteResponse = (
   requestedNames: string[]
 ): AuthFileBatchDeleteResult => {
   const failed = normalizeBatchFailures(payload?.failed);
-  const deletedFilesFromPayload = normalizeBatchFileNames(payload?.files);
+  const filesFromPayload = normalizeBatchFileNames(payload?.files);
+  // Backend single-name delete returns only {status:"ok"} (auth_files.go:794).
+  const inferFromRequest = payload?.deleted === undefined && failed.length === 0;
+  const derivedFiles = deriveSuccessfulFileNames(requestedNames, failed);
   const deleted =
     typeof payload?.deleted === 'number'
       ? payload.deleted
-      : deletedFilesFromPayload.length > 0
-        ? deletedFilesFromPayload.length
-        : requestedNames.length === 1 && failed.length === 0
-          ? 1
+      : filesFromPayload.length > 0
+        ? filesFromPayload.length
+        : inferFromRequest
+          ? requestedNames.length
           : 0;
-
-  let deletedFiles = deletedFilesFromPayload;
-  if (deletedFiles.length === 0 && deleted > 0) {
-    if (failed.length === 0 && deleted === requestedNames.length) {
-      deletedFiles = [...requestedNames];
-    } else {
-      const derivedNames = deriveSuccessfulFileNames(requestedNames, failed);
-      if (derivedNames.length === deleted) {
-        deletedFiles = derivedNames;
-      }
-    }
-  }
+  const files =
+    filesFromPayload.length > 0
+      ? filesFromPayload
+      : inferFromRequest
+        ? [...requestedNames]
+        : deleted > 0 && derivedFiles.length === deleted
+          ? derivedFiles
+          : [];
 
   return {
     status:
       typeof payload?.status === 'string' ? payload.status : failed.length > 0 ? 'partial' : 'ok',
     deleted,
-    files: deletedFiles,
+    files,
     failed,
   };
 };
@@ -187,7 +186,7 @@ const readTextField = (entry: AuthFileEntry, key: string): string => {
 };
 
 const readDateField = (entry: AuthFileEntry): number => {
-  const candidates = [entry['modtime'], entry.modified, entry['updated_at'], entry['last_refresh']];
+  const candidates = [entry['modtime'], entry['updated_at'], entry['last_refresh']];
 
   for (const value of candidates) {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -210,12 +209,7 @@ const readDateField = (entry: AuthFileEntry): number => {
   return 0;
 };
 
-const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => {
-  const value = entry['runtime_only'] ?? entry.runtimeOnly;
-  if (typeof value === 'boolean') return value;
-  if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
-  return false;
-};
+const isRuntimeOnlyEntry = (entry: AuthFileEntry): boolean => entry['runtime_only'] === true;
 
 const hasMeaningfulValue = (value: unknown): boolean => {
   if (value == null) return false;
