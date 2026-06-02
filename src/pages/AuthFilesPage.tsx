@@ -60,7 +60,13 @@ import {
   type AuthFilesSortMode,
   type AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
+import { quotaApi } from '@/services/api';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
+import type { QuotaSnapshotRecord } from '@/types/quota';
+import {
+  buildQuotaAvailabilityByAuthIndex,
+  resolveCredentialAuthIndex,
+} from '@/utils/quotaAvailability';
 import styles from './AuthFilesPage.module.scss';
 
 const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
@@ -103,6 +109,7 @@ export function AuthFilesPage() {
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [autoInspection, setAutoInspection] = useState(false);
+  const [quotaSnapshots, setQuotaSnapshots] = useState<QuotaSnapshotRecord[]>([]);
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
@@ -338,9 +345,18 @@ export function AuthFilesPage() {
     [loadFiles, sortMode]
   );
 
+  const loadQuotaSnapshots = useCallback(async () => {
+    try {
+      const payload = await quotaApi.getSnapshots();
+      setQuotaSnapshots(payload.snapshots ?? []);
+    } catch {
+      setQuotaSnapshots([]);
+    }
+  }, []);
+
   const handleHeaderRefresh = useCallback(async () => {
-    await Promise.all([loadFiles(), loadExcluded(), loadModelAlias()]);
-  }, [loadFiles, loadExcluded, loadModelAlias]);
+    await Promise.all([loadFiles(), loadExcluded(), loadModelAlias(), loadQuotaSnapshots()]);
+  }, [loadFiles, loadExcluded, loadModelAlias, loadQuotaSnapshots]);
 
   useHeaderRefresh(handleHeaderRefresh);
 
@@ -349,13 +365,33 @@ export function AuthFilesPage() {
     loadFiles();
     loadExcluded();
     loadModelAlias();
-  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelAlias]);
+    loadQuotaSnapshots();
+  }, [isCurrentLayer, loadFiles, loadExcluded, loadModelAlias, loadQuotaSnapshots]);
 
   useInterval(
     () => {
-      void loadFiles().catch(() => {});
+      void Promise.all([loadFiles(), loadQuotaSnapshots()]).catch(() => {});
     },
     isCurrentLayer ? 240_000 : null
+  );
+
+  const quotaAvailabilityByAuthIndex = useMemo(
+    () => buildQuotaAvailabilityByAuthIndex(quotaSnapshots),
+    [quotaSnapshots]
+  );
+
+  const getQuotaAwareStatusCode = useCallback(
+    (file: (typeof files)[number]) => {
+      const code = getAuthFileStatusCode(file);
+      if (code !== 429) return code;
+
+      const authIndex = resolveCredentialAuthIndex(file);
+      if (authIndex && quotaAvailabilityByAuthIndex.get(authIndex) === true) {
+        return null;
+      }
+      return code;
+    },
+    [quotaAvailabilityByAuthIndex]
   );
 
   const existingTypes = useMemo(() => {
@@ -384,20 +420,20 @@ export function AuthFilesPage() {
       '429': 0,
     };
     filesMatchingBaseStatusFilters.forEach((file) => {
-      const code = getAuthFileStatusCode(file);
+      const code = getQuotaAwareStatusCode(file);
       if (code === 401) counts['401'] += 1;
       if (code === 429) counts['429'] += 1;
     });
     return counts;
-  }, [filesMatchingBaseStatusFilters]);
+  }, [filesMatchingBaseStatusFilters, getQuotaAwareStatusCode]);
 
   const filesMatchingStatusFilters = useMemo(() => {
     if (statusCodeFilter === 'all') return filesMatchingBaseStatusFilters;
     const targetCode = Number(statusCodeFilter);
     return filesMatchingBaseStatusFilters.filter(
-      (file) => getAuthFileStatusCode(file) === targetCode
+      (file) => getQuotaAwareStatusCode(file) === targetCode
     );
-  }, [filesMatchingBaseStatusFilters, statusCodeFilter]);
+  }, [filesMatchingBaseStatusFilters, getQuotaAwareStatusCode, statusCodeFilter]);
 
   const sortOptions = useMemo(
     () => [

@@ -27,7 +27,11 @@ import {
   readCredentialText,
 } from '@/utils/authFileStatus';
 import { downloadBlob } from '@/utils/download';
-import { quotaHasAvailableCapacity, type QuotaAvailability } from '@/utils/quotaAvailability';
+import {
+  buildQuotaAvailabilityByAuthIndex,
+  resolveCredentialAuthIndex,
+  type QuotaAvailability,
+} from '@/utils/quotaAvailability';
 import {
   USAGE_TIME_RANGE_OPTIONS,
   buildUsageAnalytics,
@@ -129,49 +133,6 @@ const EMPTY_CREDENTIAL_SUMMARY: CredentialHealthSummary = {
   rows: [],
   groups: [],
   error: '',
-};
-
-const resolveCredentialAuthIndex = (file: AuthFileItem): string => {
-  const raw = file['auth_index'] ?? file.authIndex;
-  if (raw === undefined || raw === null) return '';
-  return String(raw).trim();
-};
-
-const snapshotAuthIndex = (snapshot: QuotaSnapshotRecord): string =>
-  String(snapshot.auth_index ?? snapshot.authIndex ?? '').trim();
-
-const snapshotRefreshedAtMs = (snapshot: QuotaSnapshotRecord): number => {
-  const raw = snapshot.refreshed_at_ms ?? snapshot.refreshedAtMs;
-  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
-  const parsed = Date.parse(String(snapshot.refreshed_at ?? snapshot.refreshedAt ?? ''));
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const buildQuotaAvailabilityByAuthIndex = (
-  snapshots: QuotaSnapshotRecord[]
-): Map<string, QuotaAvailability> => {
-  const latestByAuthIndex = new Map<string, { availability: QuotaAvailability; refreshedAtMs: number }>();
-
-  snapshots.forEach((snapshot) => {
-    const authIndex = snapshotAuthIndex(snapshot);
-    if (!authIndex) return;
-
-    const availability = quotaHasAvailableCapacity(snapshot.quota);
-    if (availability === null) return;
-
-    const refreshedAtMs = snapshotRefreshedAtMs(snapshot);
-    const existing = latestByAuthIndex.get(authIndex);
-    if (existing && existing.refreshedAtMs > refreshedAtMs) return;
-
-    latestByAuthIndex.set(authIndex, { availability, refreshedAtMs });
-  });
-
-  return new Map(
-    Array.from(latestByAuthIndex.entries()).map(([authIndex, value]) => [
-      authIndex,
-      value.availability,
-    ])
-  );
 };
 
 const buildCredentialHealthSummary = (
