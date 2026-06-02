@@ -407,6 +407,10 @@ export interface CredentialTokenUsage {
   lastUsedAt?: string;
   last_used_at_ms?: number;
   lastUsedAtMs?: number;
+  cycle_start_at?: string;
+  cycleStartAt?: string;
+  cycle_start_at_ms?: number;
+  cycleStartAtMs?: number;
 }
 
 export interface QuotaSnapshotsPayload {

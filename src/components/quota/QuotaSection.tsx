@@ -13,6 +13,7 @@ import type { CredentialTokenUsage, QuotaSnapshotRecord } from '@/types/quota';
 import {
   credentialMatchesSearch,
   getCredentialNextRetryAt,
+  isCredentialDisabled,
   isCredentialEffectivelyAvailable,
   isCredentialQuotaLimited,
   isCredentialUnauthorized,
@@ -312,6 +313,119 @@ const quotaWithSnapshotMetadata = <TState extends QuotaStatusState>(
   } as TState;
 };
 
+type QuotaAvailability = boolean | null;
+
+const readQuotaNumber = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const readQuotaBool = (value: unknown): boolean | null => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'y', 'on'].includes(trimmed)) return true;
+    if (['false', '0', 'no', 'n', 'off'].includes(trimmed)) return false;
+  }
+  return null;
+};
+
+const quotaValueAvailability = (value: unknown): QuotaAvailability => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+
+  if (readQuotaBool(record.unlimited) === true) {
+    return true;
+  }
+  const allowed = readQuotaBool(record.allowed);
+  if (allowed !== null) return allowed;
+
+  const limitReached = readQuotaBool(record.limitReached ?? record.limit_reached);
+  if (limitReached !== null) return !limitReached;
+
+  for (const key of ['usedPercent', 'used_percent', 'utilization']) {
+    const value = readQuotaNumber(record[key]);
+    if (value !== null) return value < 100;
+  }
+
+  for (const key of [
+    'remainingFraction',
+    'remaining_fraction',
+    'remainingAmount',
+    'remaining_amount',
+    'remaining',
+  ]) {
+    const value = readQuotaNumber(record[key]);
+    if (value !== null) return value > 0;
+  }
+
+  const used = readQuotaNumber(record.used);
+  const limit = readQuotaNumber(record.limit);
+  if (used !== null && limit !== null && limit > 0) {
+    return used < limit;
+  }
+
+  return null;
+};
+
+const quotaAllLimitsAvailability = (value: unknown): QuotaAvailability => {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  let found = false;
+  for (const item of value) {
+    const availability = quotaValueAvailability(item);
+    if (availability === false) return false;
+    if (availability === true) found = true;
+  }
+  return found ? true : null;
+};
+
+const quotaAnyLimitAvailability = (value: unknown): QuotaAvailability => {
+  let foundExhausted = false;
+
+  const visit = (entry: unknown): boolean => {
+    if (!entry) return false;
+    if (Array.isArray(entry)) {
+      return entry.some(visit);
+    }
+    if (typeof entry !== 'object') return false;
+
+    const availability = quotaValueAvailability(entry);
+    if (availability === true) return true;
+    if (availability === false) foundExhausted = true;
+
+    return Object.values(entry as Record<string, unknown>).some(visit);
+  };
+
+  if (visit(value)) return true;
+  return foundExhausted ? false : null;
+};
+
+const quotaHasAvailableCapacity = (
+  quota: QuotaStatusState | undefined
+): QuotaAvailability => {
+  if (!quota || quota.status !== 'success') return null;
+  const record = quota as unknown as Record<string, unknown>;
+
+  for (const key of ['windows', 'rows']) {
+    const availability = quotaAllLimitsAvailability(record[key]);
+    if (availability !== null) return availability;
+  }
+
+  const billingAvailability = quotaValueAvailability(record.billing);
+  if (billingAvailability !== null) return billingAvailability;
+
+  for (const key of ['groups', 'buckets']) {
+    const availability = quotaAnyLimitAvailability(record[key]);
+    if (availability !== null) return availability;
+  }
+
+  return quotaAnyLimitAvailability(record);
+};
+
 export function QuotaSection<TState extends QuotaStatusState, TData>({
   config,
   files,
@@ -326,6 +440,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const setQuota = useQuotaStore((state) => state[config.storeSetter]) as QuotaSetter<
     Record<string, TState>
   >;
+  const { quota, loadQuota } = useQuotaLoader(config);
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
@@ -339,17 +454,56 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     config
   ]);
 
+  const quotaAwareAvailability = useCallback(
+    (file: AuthFileItem): QuotaAvailability => {
+      const snapshotAvailability = quotaHasAvailableCapacity(quota[file.name]);
+      if (snapshotAvailability === true) {
+        if (isCredentialDisabled(file) || isCredentialUnauthorized(file)) {
+          return false;
+        }
+        if (
+          isCredentialQuotaLimited(file, availabilityNowMs) ||
+          isCredentialEffectivelyAvailable(file, availabilityNowMs)
+        ) {
+          return true;
+        }
+        return null;
+      }
+      if (snapshotAvailability === false) {
+        return false;
+      }
+      return null;
+    },
+    [availabilityNowMs, quota]
+  );
+
+  const isQuotaAwareAvailable = useCallback(
+    (file: AuthFileItem): boolean => {
+      const snapshotAvailability = quotaAwareAvailability(file);
+      if (snapshotAvailability !== null) return snapshotAvailability;
+      return isCredentialEffectivelyAvailable(file, availabilityNowMs);
+    },
+    [availabilityNowMs, quotaAwareAvailability]
+  );
+
+  const isQuotaAwareLimited = useCallback(
+    (file: AuthFileItem): boolean => {
+      const snapshotAvailability = quotaHasAvailableCapacity(quota[file.name]);
+      if (snapshotAvailability === false) return true;
+      if (snapshotAvailability === true) return false;
+      return isCredentialQuotaLimited(file, availabilityNowMs);
+    },
+    [availabilityNowMs, quota]
+  );
+
   const typeSummary = useMemo(() => {
-    const nowMs = availabilityNowMs;
     return {
       total: matchingFiles.length,
-      available: matchingFiles.filter((file) => isCredentialEffectivelyAvailable(file, nowMs)).length,
-      quotaLimited: matchingFiles.filter((file) => isCredentialQuotaLimited(file, nowMs)).length,
+      available: matchingFiles.filter(isQuotaAwareAvailable).length,
+      quotaLimited: matchingFiles.filter(isQuotaAwareLimited).length,
       unauthorized: matchingFiles.filter(isCredentialUnauthorized).length,
     };
-  }, [availabilityNowMs, matchingFiles]);
-
-  const { quota, loadQuota } = useQuotaLoader(config);
+  }, [isQuotaAwareAvailable, isQuotaAwareLimited, matchingFiles]);
 
   const searchedFiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -359,7 +513,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const displayFiles = useMemo(() => {
     const filtered = searchedFiles.filter((file) => {
       if (availabilityFilter === 'all') return true;
-      const available = isCredentialEffectivelyAvailable(file, availabilityNowMs);
+      const available = isQuotaAwareAvailable(file);
       return availabilityFilter === 'available' ? available : !available;
     });
 
@@ -376,7 +530,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         return left.index - right.index;
       })
       .map((entry) => entry.file);
-  }, [availabilityFilter, availabilityNowMs, quota, resetSort, searchedFiles, sortNowMs]);
+  }, [availabilityFilter, isQuotaAwareAvailable, quota, resetSort, searchedFiles, sortNowMs]);
 
   const {
     pageSize,
@@ -407,13 +561,13 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     () =>
       pageItems
         .map((file) => {
-          if (!isCredentialEffectivelyAvailable(file, availabilityNowMs)) return null;
+          if (!isQuotaAwareAvailable(file)) return null;
           const resetMs = expiredQuotaResetMs(quota[file.name], availabilityNowMs);
           if (resetMs === NO_RESET_TIME) return null;
           return { file };
         })
         .filter((entry): entry is { file: AuthFileItem } => entry !== null),
-    [availabilityNowMs, pageItems, quota]
+    [availabilityNowMs, isQuotaAwareAvailable, pageItems, quota]
   );
 
   const selectedTargets = useMemo(

@@ -143,6 +143,8 @@ export function QuotaPage() {
         files={files}
         loading={loading}
         disabled={disableControls}
+        snapshots={snapshots}
+        tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
       />
       <QuotaSection
