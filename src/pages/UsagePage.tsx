@@ -10,9 +10,10 @@ import {
   IconUpload,
 } from '@/components/ui/icons';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
-import { apiKeysApi, authFilesApi, usageApi } from '@/services/api';
+import { apiKeysApi, authFilesApi, quotaApi, usageApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types/authFile';
+import type { QuotaSnapshotRecord } from '@/types/quota';
 import type { UsagePayload, UsageTimeRange } from '@/types/usage';
 import {
   credentialProviderKey,
@@ -21,9 +22,12 @@ import {
   isCredentialCooling,
   isCredentialDisabled,
   isCredentialEffectivelyAvailable,
+  isCredentialQuotaLimited,
+  isCredentialUnauthorized,
   readCredentialText,
 } from '@/utils/authFileStatus';
 import { downloadBlob } from '@/utils/download';
+import { quotaHasAvailableCapacity, type QuotaAvailability } from '@/utils/quotaAvailability';
 import {
   USAGE_TIME_RANGE_OPTIONS,
   buildUsageAnalytics,
@@ -127,11 +131,56 @@ const EMPTY_CREDENTIAL_SUMMARY: CredentialHealthSummary = {
   error: '',
 };
 
+const resolveCredentialAuthIndex = (file: AuthFileItem): string => {
+  const raw = file['auth_index'] ?? file.authIndex;
+  if (raw === undefined || raw === null) return '';
+  return String(raw).trim();
+};
+
+const snapshotAuthIndex = (snapshot: QuotaSnapshotRecord): string =>
+  String(snapshot.auth_index ?? snapshot.authIndex ?? '').trim();
+
+const snapshotRefreshedAtMs = (snapshot: QuotaSnapshotRecord): number => {
+  const raw = snapshot.refreshed_at_ms ?? snapshot.refreshedAtMs;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  const parsed = Date.parse(String(snapshot.refreshed_at ?? snapshot.refreshedAt ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const buildQuotaAvailabilityByAuthIndex = (
+  snapshots: QuotaSnapshotRecord[]
+): Map<string, QuotaAvailability> => {
+  const latestByAuthIndex = new Map<string, { availability: QuotaAvailability; refreshedAtMs: number }>();
+
+  snapshots.forEach((snapshot) => {
+    const authIndex = snapshotAuthIndex(snapshot);
+    if (!authIndex) return;
+
+    const availability = quotaHasAvailableCapacity(snapshot.quota);
+    if (availability === null) return;
+
+    const refreshedAtMs = snapshotRefreshedAtMs(snapshot);
+    const existing = latestByAuthIndex.get(authIndex);
+    if (existing && existing.refreshedAtMs > refreshedAtMs) return;
+
+    latestByAuthIndex.set(authIndex, { availability, refreshedAtMs });
+  });
+
+  return new Map(
+    Array.from(latestByAuthIndex.entries()).map(([authIndex, value]) => [
+      authIndex,
+      value.availability,
+    ])
+  );
+};
+
 const buildCredentialHealthSummary = (
   files: AuthFileItem[],
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  quotaSnapshots: QuotaSnapshotRecord[] = []
 ): CredentialHealthSummary => {
   const groups = new Map<string, CredentialHealthGroup>();
+  const quotaAvailabilityByAuthIndex = buildQuotaAvailabilityByAuthIndex(quotaSnapshots);
   const ensureGroup = (provider: string): CredentialHealthGroup => {
     const existing = groups.get(provider);
     if (existing) return existing;
@@ -140,8 +189,38 @@ const buildCredentialHealthSummary = (
     return next;
   };
 
+  const quotaAvailabilityForFile = (file: AuthFileItem): QuotaAvailability => {
+    const authIndex = resolveCredentialAuthIndex(file);
+    return authIndex ? quotaAvailabilityByAuthIndex.get(authIndex) ?? null : null;
+  };
+
+  const isQuotaAwareCooling = (file: AuthFileItem): boolean => {
+    if (isCredentialDisabled(file) || isCredentialUnauthorized(file)) return false;
+
+    const snapshotAvailability = quotaAvailabilityForFile(file);
+    if (snapshotAvailability === true && isCredentialQuotaLimited(file, nowMs)) return false;
+    if (snapshotAvailability === false) return true;
+
+    return isCredentialCooling(file, nowMs);
+  };
+
+  const isQuotaAwareAvailable = (file: AuthFileItem): boolean => {
+    if (isCredentialDisabled(file) || isCredentialUnauthorized(file)) return false;
+
+    const snapshotAvailability = quotaAvailabilityForFile(file);
+    if (snapshotAvailability === false) return false;
+    if (snapshotAvailability === true) {
+      if (isCredentialQuotaLimited(file, nowMs) || isCredentialEffectivelyAvailable(file, nowMs)) {
+        return true;
+      }
+      return false;
+    }
+
+    return isCredentialEffectivelyAvailable(file, nowMs);
+  };
+
   const rows = files
-    .filter((file) => isCredentialCooling(file, nowMs))
+    .filter((file) => isQuotaAwareCooling(file) && getCredentialNextRetryAt(file) > nowMs)
     .map((file) => {
       const nextRetryAt = getCredentialNextRetryAt(file);
       const message = getCredentialStatusMessage(file);
@@ -154,23 +233,38 @@ const buildCredentialHealthSummary = (
     })
     .sort((a, b) => a.nextRetryAt - b.nextRetryAt);
 
+  let cooling = 0;
+  let disabled = 0;
+  let available = 0;
+
   files.forEach((file) => {
     const group = ensureGroup(credentialProviderKey(file));
+    const fileCooling = isQuotaAwareCooling(file);
+    const fileDisabled = isCredentialDisabled(file);
+    const fileAvailable = isQuotaAwareAvailable(file);
+
     group.total += 1;
-    if (isCredentialDisabled(file)) group.disabled += 1;
-    if (isCredentialCooling(file, nowMs)) group.cooling += 1;
-    if (isCredentialEffectivelyAvailable(file, nowMs)) group.available += 1;
+    if (fileDisabled) {
+      group.disabled += 1;
+      disabled += 1;
+    }
+    if (fileCooling) {
+      group.cooling += 1;
+      cooling += 1;
+    }
+    if (fileAvailable) {
+      group.available += 1;
+      available += 1;
+    }
   });
 
-  const disabled = files.filter(isCredentialDisabled).length;
-  const cooling = rows.length;
   const total = files.length;
 
   return {
     total,
     cooling,
     disabled,
-    available: files.filter((file) => isCredentialEffectivelyAvailable(file, nowMs)).length,
+    available,
     rows,
     groups: Array.from(groups.values()).sort((left, right) => {
       if (right.cooling !== left.cooling) return right.cooling - left.cooling;
@@ -800,7 +894,7 @@ export function UsagePage() {
     setLoading(true);
     setError(null);
     try {
-      const [usageData, enabled, authFilesResult, apiKeyLabels] = await Promise.all([
+      const [usageData, enabled, authFilesResult, quotaSnapshots, apiKeyLabels] = await Promise.all([
         usageApi.getUsage(),
         usageApi.getStatisticsEnabled().catch(() => null),
         authFilesApi
@@ -810,6 +904,7 @@ export function UsagePage() {
             data: null,
             error: err instanceof Error ? err.message : '凭证列表读取失败',
           })),
+        quotaApi.getSnapshots().catch(() => ({ snapshots: [], token_usage: {} })),
         apiKeysApi
           .list()
           .then((keys) => buildApiKeyLabelsByHash(keys))
@@ -820,7 +915,11 @@ export function UsagePage() {
       setApiKeyLabelsByHash(apiKeyLabels);
       setCredentialSummary(
         authFilesResult.data
-          ? buildCredentialHealthSummary(authFilesResult.data.files ?? [])
+          ? buildCredentialHealthSummary(
+              authFilesResult.data.files ?? [],
+              Date.now(),
+              quotaSnapshots.snapshots
+            )
           : { ...EMPTY_CREDENTIAL_SUMMARY, error: authFilesResult.error || '凭证列表读取失败' }
       );
     } catch (err) {
