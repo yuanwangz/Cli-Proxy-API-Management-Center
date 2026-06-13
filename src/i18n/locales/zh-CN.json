@@ -1315,6 +1315,7 @@
       "view": "查看",
       "delete": "删除",
       "clear": "清空",
+      "clearCooldown": "解除冷却",
       "cancel": "取消",
       "save": "保存",
       "create": "创建",
@@ -1359,10 +1360,25 @@
     "status": {
       "active": "活跃",
       "disabled": "已停用",
+      "cooling": "冷却中",
+      "blocked": "暂停中",
       "notSet": "未设置",
       "none": "无",
       "notConfigured": "未配置",
-      "defaultSuffix": "(默认)"
+      "defaultSuffix": "(默认)",
+      "model": "模型 {{model}}",
+      "reason": "原因 {{reason}}",
+      "retryAfter": "恢复 {{time}}"
+    },
+    "statusReasons": {
+      "quota": "限流/配额",
+      "not_found": "404/模型不支持",
+      "model_not_supported": "模型不支持",
+      "payment_required": "额度/权限不足",
+      "unauthorized": "未授权",
+      "timeout": "超时",
+      "upstream_error": "上游错误",
+      "cloudflare challenge": "Cloudflare 验证"
     },
     "detail": {
       "title": "详情",
@@ -1448,7 +1464,9 @@
       "deleted": "删除成功",
       "enabled": "已启用",
       "disabled": "已停用",
-      "toggleFailed": "更新状态失败"
+      "toggleFailed": "更新状态失败",
+      "cooldownCleared": "已解除冷却",
+      "cooldownClearFailed": "解除冷却失败"
     },
     "unsavedChanges": {
       "title": "确定丢弃未保存的修改吗?",

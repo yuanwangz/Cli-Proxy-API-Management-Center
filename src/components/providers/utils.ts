@@ -25,8 +25,7 @@ export const withDisableAllModelsRule = (models?: string[]) => {
   return [...base, DISABLE_ALL_MODELS_RULE];
 };
 
-export const withoutDisableAllModelsRule = (models?: string[]) =>
-  stripDisableAllModelsRule(models);
+export const withoutDisableAllModelsRule = (models?: string[]) => stripDisableAllModelsRule(models);
 
 const normalizeOpenAIBaseUrl = (baseUrl: string): string => {
   let trimmed = String(baseUrl || '').trim();
@@ -82,9 +81,11 @@ const EMPTY_RECENT_USAGE_ENTRY: RecentRequestUsageEntry = {
 };
 
 const normalizeProviderRecentKey = (value: unknown): string =>
-  String(value ?? '').trim().toLowerCase();
+  String(value ?? '')
+    .trim()
+    .toLowerCase();
 
-const getProviderRecentUsageEntry = (
+export const getProviderRecentUsageEntry = (
   usageByProvider: ProviderRecentUsageMap,
   provider: string,
   apiKey?: string,

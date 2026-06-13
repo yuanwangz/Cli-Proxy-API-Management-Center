@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ampcodeApi, providersApi } from '@/services/api';
+import { ampcodeApi, apiKeyUsageApi, providersApi } from '@/services/api';
 import { useAuthStore, useConfigStore } from '@/stores';
 import {
   withDisableAllModelsRule,
@@ -47,6 +47,7 @@ export interface UseProviderWorkbenchResult {
   updateProvider: (resource: ProviderResource, input: ProviderEntryFormInput) => Promise<void>;
   deleteProvider: (resource: ProviderResource) => Promise<void>;
   toggleDisabled: (resource: ProviderResource, disabled: boolean) => Promise<void>;
+  clearCooldown: (resource: ProviderResource) => Promise<void>;
   saveAmpcode: (config: AmpcodeConfig) => Promise<void>;
   mutating: boolean;
   refreshSnapshot: () => void;
@@ -525,6 +526,31 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
     ]
   );
 
+  const clearCooldown = useCallback(
+    async (resource: ProviderResource) => {
+      if (
+        resource.brand === 'ampcode' ||
+        resource.brand === 'openaiCompatibility' ||
+        !resource.apiKey
+      ) {
+        throw new Error('Unsupported provider resource');
+      }
+      setMutating(true);
+      try {
+        await apiKeyUsageApi.clearCooldown({
+          provider: resource.brand,
+          authIndex: resource.authIndex,
+          apiKey: resource.apiKey,
+          baseUrl: resource.baseUrl,
+        });
+        refreshSnapshot();
+      } finally {
+        setMutating(false);
+      }
+    },
+    [refreshSnapshot]
+  );
+
   const saveAmpcode = useCallback(
     async (next: AmpcodeConfig) => {
       setMutating(true);
@@ -580,6 +606,7 @@ export function useProviderWorkbench(): UseProviderWorkbenchResult {
     updateProvider,
     deleteProvider,
     toggleDisabled,
+    clearCooldown,
     saveAmpcode,
     mutating,
     refreshSnapshot,

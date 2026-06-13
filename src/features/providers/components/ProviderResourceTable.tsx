@@ -5,6 +5,7 @@ import {
   IconCheckCircle2,
   IconEye,
   IconPencil,
+  IconRefreshCw,
   IconTrash2,
 } from '@/components/ui/icons';
 import {
@@ -20,12 +21,13 @@ import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import {
   getOpenAIProviderRecentStatusData,
   getOpenAIProviderTotalStats,
+  getProviderRecentUsageEntry,
   getProviderRecentStatusData,
   getProviderTotalStats,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
-import type { StatusBarData } from '@/utils/recentRequests';
+import type { RecentRequestUsageEntry, StatusBarData } from '@/utils/recentRequests';
 import type { ProviderResource } from '../types';
 import styles from './ProviderResourceTable.module.scss';
 import statusBarStyles from './providerStatusBar.module.scss';
@@ -39,6 +41,7 @@ interface ProviderResourceTableProps {
   onEdit: (resource: ProviderResource) => void;
   onDelete: (resource: ProviderResource) => void;
   onToggleDisabled?: (resource: ProviderResource, disabled: boolean) => void;
+  onClearCooldown?: (resource: ProviderResource) => void;
 }
 
 const columnWidths = ['18%', '18%', '6%', '14%', '24%', '20%'];
@@ -48,10 +51,7 @@ const resolveStatusBarData = (
   usageByProvider: ProviderRecentUsageMap
 ): StatusBarData => {
   if (resource.brand === 'openaiCompatibility') {
-    return getOpenAIProviderRecentStatusData(
-      resource.raw as OpenAIProviderConfig,
-      usageByProvider
-    );
+    return getOpenAIProviderRecentStatusData(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
   return getProviderRecentStatusData(
     usageByProvider,
@@ -66,10 +66,7 @@ const resolveTotalStats = (
   usageByProvider: ProviderRecentUsageMap
 ): { success: number; failure: number } => {
   if (resource.brand === 'openaiCompatibility') {
-    return getOpenAIProviderTotalStats(
-      resource.raw as OpenAIProviderConfig,
-      usageByProvider
-    );
+    return getOpenAIProviderTotalStats(resource.raw as OpenAIProviderConfig, usageByProvider);
   }
   return getProviderTotalStats(
     usageByProvider,
@@ -77,6 +74,41 @@ const resolveTotalStats = (
     resource.apiKey ?? undefined,
     resource.baseUrl ?? undefined
   );
+};
+
+const resolveUsageEntry = (
+  resource: ProviderResource,
+  usageByProvider?: ProviderRecentUsageMap
+): RecentRequestUsageEntry | null => {
+  if (
+    !usageByProvider ||
+    resource.brand === 'ampcode' ||
+    resource.brand === 'openaiCompatibility'
+  ) {
+    return null;
+  }
+  return getProviderRecentUsageEntry(
+    usageByProvider,
+    resource.brand,
+    resource.apiKey ?? undefined,
+    resource.baseUrl ?? undefined
+  );
+};
+
+const usageEntryHasCooling = (entry: RecentRequestUsageEntry | null): boolean =>
+  Boolean(entry?.cooling || (entry?.coolingCount ?? 0) > 0);
+
+const usageEntryHasBlocked = (entry: RecentRequestUsageEntry | null): boolean =>
+  Boolean(entry?.blocked || (entry?.blockedCount ?? 0) > 0);
+
+const formatRetryAt = (value: string | undefined, locale?: string): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date);
 };
 
 export function ProviderResourceTable({
@@ -88,8 +120,9 @@ export function ProviderResourceTable({
   onEdit,
   onDelete,
   onToggleDisabled,
+  onClearCooldown,
 }: ProviderResourceTableProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const renderMetric = (key: string, label: string, value: number) => (
     <span key={key} className={styles.metric}>
@@ -110,17 +143,17 @@ export function ProviderResourceTable({
       items.push(
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
         renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount),
+        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
     } else if (r.brand === 'ampcode') {
       items.push(
         renderMetric('mappings', t('providersPage.table.metrics.mappings'), r.modelCount),
-        renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount),
+        renderMetric('keys', t('providersPage.table.metrics.keys'), r.apiKeyEntryCount)
       );
     } else {
       items.push(
         renderMetric('models', t('providersPage.table.metrics.models'), r.modelCount),
-        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount),
+        renderMetric('headers', t('providersPage.table.metrics.headers'), r.headerCount)
       );
       if (r.brand === 'codex' && r.flags.websockets) {
         items.push(renderFlagTag('ws', t('providersPage.table.websocketsTag')));
@@ -132,7 +165,10 @@ export function ProviderResourceTable({
     return <div className={styles.metricsCell}>{items}</div>;
   };
 
-  const renderStatus = (r: ProviderResource) => {
+  const reasonLabel = (reason: string) =>
+    t(`providersPage.statusReasons.${reason}`, { defaultValue: reason });
+
+  const renderStatus = (r: ProviderResource, usageEntry: RecentRequestUsageEntry | null) => {
     if (r.brand === 'ampcode' && r.flags.isPlaceholder) {
       return (
         <span className={`${styles.statusBadge} ${styles.statusDisabled}`}>
@@ -149,10 +185,52 @@ export function ProviderResourceTable({
         </span>
       );
     }
+    if (usageEntryHasCooling(usageEntry)) {
+      return (
+        <span className={`${styles.statusBadge} ${styles.statusCooling}`}>
+          <IconAlertTriangle size={14} />
+          {t('providersPage.status.cooling')}
+        </span>
+      );
+    }
+    if (usageEntryHasBlocked(usageEntry)) {
+      return (
+        <span className={`${styles.statusBadge} ${styles.statusBlocked}`}>
+          <IconAlertTriangle size={14} />
+          {t('providersPage.status.blocked')}
+        </span>
+      );
+    }
     return (
       <span className={`${styles.statusBadge} ${styles.statusActive}`}>
         <IconCheckCircle2 size={14} />
         {t('providersPage.status.active')}
+      </span>
+    );
+  };
+
+  const renderStatusDetail = (entry: RecentRequestUsageEntry | null) => {
+    if (!usageEntryHasBlocked(entry)) return null;
+    const modelState =
+      entry?.modelStates?.find((state) => state.cooling) ??
+      entry?.modelStates?.find((state) => state.blocked);
+    const reason = entry?.blockReason || modelState?.blockReason || '';
+    const retryAt = entry?.nextRetryAfter || modelState?.nextRetryAfter;
+    const parts: string[] = [];
+    if (modelState?.model) {
+      parts.push(t('providersPage.status.model', { model: modelState.model }));
+    }
+    if (reason) {
+      parts.push(t('providersPage.status.reason', { reason: reasonLabel(reason) }));
+    }
+    const retryLabel = formatRetryAt(retryAt, i18n.language);
+    if (retryLabel) {
+      parts.push(t('providersPage.status.retryAfter', { time: retryLabel }));
+    }
+    if (parts.length === 0) return null;
+    return (
+      <span className={styles.statusDetail} title={parts.join(' · ')}>
+        {parts.join(' · ')}
       </span>
     );
   };
@@ -163,9 +241,7 @@ export function ProviderResourceTable({
       return (
         <div className={styles.primaryCell}>
           <span className={styles.primaryName}>{r.name ?? r.identifier}</span>
-          <span className={styles.primarySub}>
-            {(r.apiKeyPreview ?? '—') + extra}
-          </span>
+          <span className={styles.primarySub}>{(r.apiKeyPreview ?? '—') + extra}</span>
         </div>
       );
     }
@@ -182,9 +258,7 @@ export function ProviderResourceTable({
     return (
       <div className={styles.primaryCell}>
         <span className={styles.primaryName}>{r.apiKeyPreview ?? '—'}</span>
-        {r.authIndex ? (
-          <span className={styles.primarySub}>auth: {r.authIndex}</span>
-        ) : null}
+        {r.authIndex ? <span className={styles.primarySub}>auth: {r.authIndex}</span> : null}
       </div>
     );
   };
@@ -200,11 +274,7 @@ export function ProviderResourceTable({
     if (r.brand === 'ampcode' && !r.baseUrl) {
       return <span className={styles.baseUrl}>{t('providersPage.status.notConfigured')}</span>;
     }
-    return (
-      <span className={styles.baseUrl}>
-        {r.baseUrl ?? t('providersPage.status.notSet')}
-      </span>
-    );
+    return <span className={styles.baseUrl}>{r.baseUrl ?? t('providersPage.status.notSet')}</span>;
   };
 
   return (
@@ -226,6 +296,11 @@ export function ProviderResourceTable({
       <TableBody>
         {resources.map((resource) => {
           const isAmpcode = resource.brand === 'ampcode';
+          const usageEntry = resolveUsageEntry(resource, usageByProvider);
+          const canClearCooldown =
+            !isAmpcode &&
+            resource.brand !== 'openaiCompatibility' &&
+            usageEntryHasCooling(usageEntry);
           return (
             <TableRow key={resource.id} selected={resource.id === selectedId}>
               <TableCell>{renderPrimary(resource)}</TableCell>
@@ -242,7 +317,8 @@ export function ProviderResourceTable({
               <TableCell>{renderModelsSummary(resource)}</TableCell>
               <TableCell>
                 <div className={styles.statusCell}>
-                  {renderStatus(resource)}
+                  {renderStatus(resource, usageEntry)}
+                  {renderStatusDetail(usageEntry)}
                   {usageByProvider && resource.brand !== 'ampcode' ? (
                     <>
                       {(() => {
@@ -269,16 +345,11 @@ export function ProviderResourceTable({
               <TableCell alignRight>
                 <div className={styles.actions}>
                   {!isAmpcode && onToggleDisabled ? (
-                    <span
-                      className={styles.toggleWrap}
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <span className={styles.toggleWrap} onClick={(e) => e.stopPropagation()}>
                       <ToggleSwitch
                         checked={!resource.disabled}
                         disabled={disableMutations}
-                        onChange={(value) =>
-                          onToggleDisabled(resource, !value)
-                        }
+                        onChange={(value) => onToggleDisabled(resource, !value)}
                         ariaLabel={
                           resource.disabled
                             ? t('providersPage.actions.enable')
@@ -286,6 +357,21 @@ export function ProviderResourceTable({
                         }
                       />
                     </span>
+                  ) : null}
+                  {onClearCooldown && canClearCooldown ? (
+                    <button
+                      type="button"
+                      className={`${styles.iconBtn} ${styles.iconBtnCooldown}`}
+                      aria-label={t('providersPage.actions.clearCooldown')}
+                      title={t('providersPage.actions.clearCooldown')}
+                      disabled={disableMutations}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onClearCooldown(resource);
+                      }}
+                    >
+                      <IconRefreshCw size={16} />
+                    </button>
                   ) : null}
                   <button
                     type="button"

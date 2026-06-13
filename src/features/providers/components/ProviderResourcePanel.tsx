@@ -9,11 +9,7 @@ import { IconPlus, IconSearch } from '@/components/ui/icons';
 import type { ProviderRecentUsageMap } from '@/components/providers/utils';
 import type { ProviderBrand, ProviderGroup, ProviderResource } from '../types';
 import { ProviderResourceTable } from './ProviderResourceTable';
-import {
-  OpenAIBrandToolbar,
-  type OpenAISortBy,
-  type SortDir,
-} from './OpenAIBrandToolbar';
+import { OpenAIBrandToolbar, type OpenAISortBy, type SortDir } from './OpenAIBrandToolbar';
 import styles from './ProviderResourcePanel.module.scss';
 
 const LOGOS: Record<ProviderBrand, { src: string; invertOnDark?: boolean }> = {
@@ -48,6 +44,7 @@ interface ProviderResourcePanelProps {
   onEdit: (resource: ProviderResource) => void;
   onDelete: (resource: ProviderResource) => void;
   onToggleDisabled?: (resource: ProviderResource, disabled: boolean) => void;
+  onClearCooldown?: (resource: ProviderResource) => void;
   onCreate: () => void;
 }
 
@@ -64,6 +61,7 @@ export function ProviderResourcePanel({
   onEdit,
   onDelete,
   onToggleDisabled,
+  onClearCooldown,
   onCreate,
 }: ProviderResourcePanelProps) {
   const { t } = useTranslation();
@@ -85,9 +83,7 @@ export function ProviderResourcePanel({
                   className={`${styles.logo} ${logo.invertOnDark ? styles.logoInvertOnDark : ''}`}
                 />
               ) : null}
-              <h2 className={styles.title}>
-                {t(`providersPage.providerNames.${group.id}`)}
-              </h2>
+              <h2 className={styles.title}>{t(`providersPage.providerNames.${group.id}`)}</h2>
             </div>
           </div>
           {group.id !== 'ampcode' ? (
@@ -164,6 +160,7 @@ export function ProviderResourcePanel({
           onEdit={onEdit}
           onDelete={onDelete}
           onToggleDisabled={onToggleDisabled}
+          onClearCooldown={onClearCooldown}
         />
       )}
     </section>

@@ -1341,6 +1341,7 @@
       "view": "檢視",
       "delete": "刪除",
       "clear": "清空",
+      "clearCooldown": "解除冷卻",
       "cancel": "取消",
       "save": "儲存",
       "create": "建立",
@@ -1385,10 +1386,25 @@
     "status": {
       "active": "活躍",
       "disabled": "已停用",
+      "cooling": "冷卻中",
+      "blocked": "暫停中",
       "notSet": "未設定",
       "none": "無",
       "notConfigured": "未設定",
-      "defaultSuffix": "(預設)"
+      "defaultSuffix": "(預設)",
+      "model": "模型 {{model}}",
+      "reason": "原因 {{reason}}",
+      "retryAfter": "恢復 {{time}}"
+    },
+    "statusReasons": {
+      "quota": "限流/配額",
+      "not_found": "404/模型不支援",
+      "model_not_supported": "模型不支援",
+      "payment_required": "額度/權限不足",
+      "unauthorized": "未授權",
+      "timeout": "逾時",
+      "upstream_error": "上游錯誤",
+      "cloudflare challenge": "Cloudflare 驗證"
     },
     "detail": {
       "title": "詳情",
@@ -1474,7 +1490,9 @@
       "deleted": "刪除成功",
       "enabled": "已啟用",
       "disabled": "已停用",
-      "toggleFailed": "更新狀態失敗"
+      "toggleFailed": "更新狀態失敗",
+      "cooldownCleared": "已解除冷卻",
+      "cooldownClearFailed": "解除冷卻失敗"
     },
     "unsavedChanges": {
       "title": "確定捨棄未儲存的變更嗎?",

@@ -156,6 +156,29 @@
   color: var(--amber-text);
 }
 
+.statusCooling {
+  border-color: var(--failure-badge-border);
+  background: var(--failure-badge-bg);
+  color: var(--failure-badge-text);
+}
+
+.statusBlocked {
+  border-color: var(--amber-30);
+  background: var(--amber-10);
+  color: var(--amber-text);
+}
+
+.statusDetail {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .actions {
   display: flex;
   gap: 4px;
@@ -181,7 +204,9 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color $transition-fast, color $transition-fast;
+  transition:
+    background-color $transition-fast,
+    color $transition-fast;
 
   &:hover:not(:disabled) {
     background: var(--bg-tertiary);
@@ -205,5 +230,14 @@
   &:hover:not(:disabled) {
     background: var(--destructive-10);
     color: var(--destructive-color);
+  }
+}
+
+.iconBtnCooldown {
+  color: var(--amber-text);
+
+  &:hover:not(:disabled) {
+    background: var(--amber-10);
+    color: var(--amber-text);
   }
 }

@@ -1315,6 +1315,7 @@
       "view": "View",
       "delete": "Delete",
       "clear": "Clear",
+      "clearCooldown": "Clear cooldown",
       "cancel": "Cancel",
       "save": "Save",
       "create": "Create",
@@ -1359,10 +1360,25 @@
     "status": {
       "active": "Active",
       "disabled": "Disabled",
+      "cooling": "Cooling down",
+      "blocked": "Paused",
       "notSet": "Not set",
       "none": "None",
       "notConfigured": "Not configured",
-      "defaultSuffix": "(default)"
+      "defaultSuffix": "(default)",
+      "model": "Model {{model}}",
+      "reason": "Reason {{reason}}",
+      "retryAfter": "Retry {{time}}"
+    },
+    "statusReasons": {
+      "quota": "rate limit/quota",
+      "not_found": "404/model unsupported",
+      "model_not_supported": "model unsupported",
+      "payment_required": "quota/permission",
+      "unauthorized": "unauthorized",
+      "timeout": "timeout",
+      "upstream_error": "upstream error",
+      "cloudflare challenge": "Cloudflare challenge"
     },
     "detail": {
       "title": "Details",
@@ -1448,7 +1464,9 @@
       "deleted": "Deleted",
       "enabled": "Enabled",
       "disabled": "Disabled",
-      "toggleFailed": "Failed to update status"
+      "toggleFailed": "Failed to update status",
+      "cooldownCleared": "Cooldown cleared",
+      "cooldownClearFailed": "Failed to clear cooldown"
     },
     "unsavedChanges": {
       "title": "Discard unsaved changes?",
