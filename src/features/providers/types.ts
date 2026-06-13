@@ -10,6 +10,12 @@ export type ProviderBrand =
   | 'openaiCompatibility'
   | 'ampcode';
 
+export const PROVIDER_SORT_BY_VALUES = ['name', 'priority', 'recent-success'] as const;
+export type ProviderSortBy = (typeof PROVIDER_SORT_BY_VALUES)[number];
+
+export const SORT_DIR_VALUES = ['asc', 'desc'] as const;
+export type SortDir = (typeof SORT_DIR_VALUES)[number];
+
 export type ProviderResourceSelector =
   | { brand: 'gemini'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'codex'; apiKey: string; baseUrl?: string; index: number }
@@ -44,6 +50,10 @@ export interface ProviderResource {
   proxyUrl: string | null;
   prefix: string | null;
   modelCount: number;
+  /** 去重后的模型名(ampcode 为映射两端), 供筛选/搜索用 */
+  models: string[];
+  /** 排序用优先级,未配置时为 0 */
+  priority: number;
   headerCount: number;
   excludedModelCount: number;
   /** 仅 OpenAI 有意义,其它 brand 该字段不展示但保留 */
@@ -58,23 +68,14 @@ export interface ProviderResource {
   raw: unknown;
 }
 
-export interface ProviderGroupIssue {
-  status?: string;
-  message: string;
-}
-
 export interface ProviderGroup {
   id: ProviderBrand;
   resources: ProviderResource[];
-  issue: ProviderGroupIssue | null;
-  /** 描述路径,例如 /ai-providers/gemini,用于 Sheet description */
-  path: string;
 }
 
 export interface ProviderSnapshot {
   fetchedAt: string;
   groups: ProviderGroup[];
-  issues: Array<{ brand: ProviderBrand; message: string }>;
 }
 
 /**
@@ -86,6 +87,8 @@ export interface ModelEntryInput {
   alias?: string;
   priority?: number;
   testModel?: string;
+  image?: boolean;
+  thinkingJson?: string;
 }
 
 export interface ApiKeyEntryInput {
@@ -99,6 +102,7 @@ export interface CloakInput {
   mode: string;
   strictMode: boolean;
   sensitiveWordsText: string;
+  cacheUserId: boolean;
 }
 
 export interface ProviderEntryFormInput {
@@ -110,6 +114,7 @@ export interface ProviderEntryFormInput {
   proxyUrl: string;
   prefix: string;
   disabled: boolean;
+  disableCooling?: boolean;
   priority?: number;
 
   /** 高级折叠区 */
@@ -121,7 +126,8 @@ export interface ProviderEntryFormInput {
   websockets?: boolean;
   /** Claude 专属 */
   cloak?: CloakInput;
-  /** OpenAI 专属 */
+  experimentalCchSigning?: boolean;
+  /** OpenAI persists this; Gemini/Claude use it for one-off connectivity tests. */
   testModel?: string;
   apiKeyEntries?: ApiKeyEntryInput[];
 }
