@@ -1444,7 +1444,7 @@
       "view": "Просмотр",
       "delete": "Удалить",
       "clear": "Очистить",
-      "clearCooldown": "Сбросить cooldown",
+      "clearCooldown": "Сбросить блокировку/cooldown",
       "cancel": "Отмена",
       "save": "Сохранить",
       "create": "Создать",
@@ -1605,8 +1605,8 @@
       "enabled": "Включено",
       "disabled": "Отключено",
       "toggleFailed": "Не удалось обновить статус",
-      "cooldownCleared": "Cooldown сброшен",
-      "cooldownClearFailed": "Не удалось сбросить cooldown"
+      "cooldownCleared": "Блокировка/cooldown сброшены",
+      "cooldownClearFailed": "Не удалось сбросить блокировку/cooldown"
     },
     "unsavedChanges": {
       "title": "Отменить несохранённые изменения?",

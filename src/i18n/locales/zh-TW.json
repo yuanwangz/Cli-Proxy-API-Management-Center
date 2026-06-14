@@ -1493,7 +1493,7 @@
       "view": "檢視",
       "delete": "刪除",
       "clear": "清空",
-      "clearCooldown": "解除冷卻",
+      "clearCooldown": "解除暫停/冷卻",
       "cancel": "取消",
       "save": "儲存",
       "create": "建立",
@@ -1654,8 +1654,8 @@
       "enabled": "已啟用",
       "disabled": "已停用",
       "toggleFailed": "更新狀態失敗",
-      "cooldownCleared": "已解除冷卻",
-      "cooldownClearFailed": "解除冷卻失敗"
+      "cooldownCleared": "已解除暫停/冷卻",
+      "cooldownClearFailed": "解除暫停/冷卻失敗"
     },
     "unsavedChanges": {
       "title": "確定捨棄未儲存的變更嗎?",

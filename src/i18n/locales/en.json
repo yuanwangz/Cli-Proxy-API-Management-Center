@@ -1467,7 +1467,7 @@
       "view": "View",
       "delete": "Delete",
       "clear": "Clear",
-      "clearCooldown": "Clear cooldown",
+      "clearCooldown": "Clear block/cooldown",
       "cancel": "Cancel",
       "save": "Save",
       "create": "Create",
@@ -1628,8 +1628,8 @@
       "enabled": "Enabled",
       "disabled": "Disabled",
       "toggleFailed": "Failed to update status",
-      "cooldownCleared": "Cooldown cleared",
-      "cooldownClearFailed": "Failed to clear cooldown"
+      "cooldownCleared": "Block/cooldown cleared",
+      "cooldownClearFailed": "Failed to clear block/cooldown"
     },
     "unsavedChanges": {
       "title": "Discard unsaved changes?",

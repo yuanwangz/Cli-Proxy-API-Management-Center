@@ -300,7 +300,8 @@ export function ProviderResourceTable({
           const canClearCooldown =
             !isAmpcode &&
             resource.brand !== 'openaiCompatibility' &&
-            usageEntryHasCooling(usageEntry);
+            !resource.disabled &&
+            usageEntryHasBlocked(usageEntry);
           return (
             <TableRow key={resource.id} selected={resource.id === selectedId}>
               <TableCell>{renderPrimary(resource)}</TableCell>
