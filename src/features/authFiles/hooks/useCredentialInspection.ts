@@ -15,6 +15,7 @@ import type { AuthFileItem } from '@/types';
 import { normalizeAuthIndex } from '@/utils/authIndex';
 import {
   getStatusFromError,
+  isArchivedAuthFile,
   isDisabledAuthFile,
   isRuntimeOnlyAuthFile,
   resolveAuthProvider,
@@ -113,7 +114,9 @@ const uniqueFilesByName = (files: AuthFileItem[]): AuthFileItem[] => {
 };
 
 export const isCredentialInspectionSupported = (file: AuthFileItem): boolean => {
-  if (isRuntimeOnlyAuthFile(file) || isDisabledAuthFile(file)) return false;
+  if (isRuntimeOnlyAuthFile(file) || isArchivedAuthFile(file) || isDisabledAuthFile(file)) {
+    return false;
+  }
   const provider = resolveAuthProvider(file);
   return QUOTA_CONFIG_BY_PROVIDER.has(provider);
 };
@@ -184,6 +187,16 @@ export function useCredentialInspection() {
             ...base,
             status: 'unsupported',
             message: t('auth_files.inspection_virtual_skipped'),
+          });
+          completeOne();
+          return;
+        }
+
+        if (isArchivedAuthFile(file)) {
+          pushResult({
+            ...base,
+            status: 'unsupported',
+            message: t('auth_files.inspection_archived_skipped'),
           });
           completeOne();
           return;

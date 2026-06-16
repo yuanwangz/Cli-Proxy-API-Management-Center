@@ -52,6 +52,7 @@ export interface ProviderUsageAuthStatus {
   statusMessage?: string;
   statusCode?: number;
   disabled?: boolean;
+  archived?: boolean;
   unavailable?: boolean;
   blocked?: boolean;
   cooling?: boolean;
@@ -72,6 +73,7 @@ export interface RecentRequestUsageEntry {
   statusMessage?: string;
   statusCode?: number;
   disabled?: boolean;
+  archived?: boolean;
   unavailable?: boolean;
   blocked?: boolean;
   cooling?: boolean;
@@ -80,6 +82,7 @@ export interface RecentRequestUsageEntry {
   nextRetryAfterMs?: number;
   totalAuths?: number;
   disabledCount?: number;
+  archivedCount?: number;
   blockedCount?: number;
   coolingCount?: number;
   modelStates?: ProviderUsageModelState[];
@@ -105,6 +108,7 @@ export type ApiKeyUsageResponse = Record<
       status_code?: unknown;
       statusCode?: unknown;
       disabled?: unknown;
+      archived?: unknown;
       unavailable?: unknown;
       blocked?: unknown;
       cooling?: unknown;
@@ -118,6 +122,8 @@ export type ApiKeyUsageResponse = Record<
       totalAuths?: unknown;
       disabled_count?: unknown;
       disabledCount?: unknown;
+      archived_count?: unknown;
+      archivedCount?: unknown;
       blocked_count?: unknown;
       blockedCount?: unknown;
       cooling_count?: unknown;
@@ -285,6 +291,8 @@ function normalizeAuthStatus(input: unknown): ProviderUsageAuthStatus | null {
   if (statusCode !== undefined) auth.statusCode = statusCode;
   const disabled = optionalBoolean(record.disabled);
   if (disabled !== undefined) auth.disabled = disabled;
+  const archived = optionalBoolean(record.archived);
+  if (archived !== undefined) auth.archived = archived;
   const unavailable = optionalBoolean(record.unavailable);
   if (unavailable !== undefined) auth.unavailable = unavailable;
   const blocked = optionalBoolean(record.blocked);
@@ -340,6 +348,8 @@ export function normalizeRecentRequestUsageEntry(input: unknown): RecentRequestU
   if (statusCode !== undefined) entry.statusCode = statusCode;
   const disabled = optionalBoolean(record.disabled);
   if (disabled !== undefined) entry.disabled = disabled;
+  const archived = optionalBoolean(record.archived);
+  if (archived !== undefined) entry.archived = archived;
   const unavailable = optionalBoolean(record.unavailable);
   if (unavailable !== undefined) entry.unavailable = unavailable;
   const blocked = optionalBoolean(record.blocked);
@@ -356,6 +366,8 @@ export function normalizeRecentRequestUsageEntry(input: unknown): RecentRequestU
   if (totalAuths !== undefined) entry.totalAuths = totalAuths;
   const disabledCount = optionalNumber(record.disabled_count ?? record.disabledCount);
   if (disabledCount !== undefined) entry.disabledCount = disabledCount;
+  const archivedCount = optionalNumber(record.archived_count ?? record.archivedCount);
+  if (archivedCount !== undefined) entry.archivedCount = archivedCount;
   const blockedCount = optionalNumber(record.blocked_count ?? record.blockedCount);
   if (blockedCount !== undefined) entry.blockedCount = blockedCount;
   const coolingCount = optionalNumber(record.cooling_count ?? record.coolingCount);

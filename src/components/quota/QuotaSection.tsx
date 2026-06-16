@@ -13,6 +13,7 @@ import type { CredentialTokenUsage, QuotaSnapshotRecord } from '@/types/quota';
 import {
   credentialMatchesSearch,
   getCredentialNextRetryAt,
+  isCredentialArchived,
   isCredentialDisabled,
   isCredentialEffectivelyAvailable,
   isCredentialQuotaLimited,
@@ -112,7 +113,7 @@ const useQuotaPagination = <T,>(
     goToLast,
     loading,
     loadingScope,
-    setLoading
+    setLoading,
   };
 };
 
@@ -141,7 +142,9 @@ const snapshotFileName = (snapshot: QuotaSnapshotRecord): string =>
   String(snapshot.file_name ?? snapshot.fileName ?? '').trim();
 
 const snapshotProvider = (snapshot: QuotaSnapshotRecord): string =>
-  String(snapshot.provider ?? '').trim().toLowerCase();
+  String(snapshot.provider ?? '')
+    .trim()
+    .toLowerCase();
 
 const resetValueToMs = (value: unknown, nowMs: number): number => {
   if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
@@ -171,34 +174,16 @@ const resetValueToMs = (value: unknown, nowMs: number): number => {
       minuteValue <= 59;
     if (!validParts) return NO_RESET_TIME;
     const now = new Date(nowMs);
-    let date = new Date(
-      now.getFullYear(),
-      monthValue - 1,
-      dayValue,
-      hourValue,
-      minuteValue
-    );
+    let date = new Date(now.getFullYear(), monthValue - 1, dayValue, hourValue, minuteValue);
     if (
       !Number.isNaN(date.getTime()) &&
       date.getMonth() === monthValue - 1 &&
       date.getDate() === dayValue
     ) {
       if (date.getTime() < nowMs - SHORT_DATE_ROLLOVER_MS) {
-        date = new Date(
-          now.getFullYear() + 1,
-          monthValue - 1,
-          dayValue,
-          hourValue,
-          minuteValue
-        );
+        date = new Date(now.getFullYear() + 1, monthValue - 1, dayValue, hourValue, minuteValue);
       } else if (date.getTime() > nowMs + SHORT_DATE_ROLLOVER_MS) {
-        date = new Date(
-          now.getFullYear() - 1,
-          monthValue - 1,
-          dayValue,
-          hourValue,
-          minuteValue
-        );
+        date = new Date(now.getFullYear() - 1, monthValue - 1, dayValue, hourValue, minuteValue);
       }
       return date.getTime();
     }
@@ -207,9 +192,7 @@ const resetValueToMs = (value: unknown, nowMs: number): number => {
   const parsed = parseTimestampMs(text);
   if (Number.isFinite(parsed)) return parsed;
 
-  const zhDateMatch = text.match(
-    /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?/
-  );
+  const zhDateMatch = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?/);
   if (zhDateMatch) {
     const [, year, month, day, hour = '0', minute = '0'] = zhDateMatch;
     const date = new Date(
@@ -242,7 +225,15 @@ const collectResetTimes = (value: unknown, nowMs: number, times: number[]) => {
   if (typeof value !== 'object') return;
 
   const record = value as Record<string, unknown>;
-  for (const key of ['resetAt', 'reset_at', 'resetTime', 'reset_time', 'resets_at', 'resetLabel', 'resetHint']) {
+  for (const key of [
+    'resetAt',
+    'reset_at',
+    'resetTime',
+    'reset_time',
+    'resets_at',
+    'resetLabel',
+    'resetHint',
+  ]) {
     const ms = resetValueToMs(record[key], nowMs);
     if (Number.isFinite(ms)) times.push(ms);
   }
@@ -281,10 +272,7 @@ const snapshotRefreshedAtMs = (snapshot: QuotaSnapshotRecord): number => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
-const expiredQuotaResetMs = (
-  quota: QuotaStatusState | undefined,
-  nowMs: number
-): number => {
+const expiredQuotaResetMs = (quota: QuotaStatusState | undefined, nowMs: number): number => {
   if (!quota || quota.status !== 'success') return NO_RESET_TIME;
 
   const times: number[] = [];
@@ -321,7 +309,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   disabled,
   snapshots = [],
   tokenUsage = {},
-  onQuotaRefreshComplete
+  onQuotaRefreshComplete,
 }: QuotaSectionProps<TState, TData>) {
   const { t } = useTranslation();
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -340,16 +328,20 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const [searchQuery, setSearchQuery] = useState('');
   const [resettingQuotaName, setResettingQuotaName] = useState<string | null>(null);
 
-  const matchingFiles = useMemo(() => files.filter((file) => config.filterFn(file)), [
-    files,
-    config
-  ]);
+  const matchingFiles = useMemo(
+    () => files.filter((file) => config.filterFn(file)),
+    [files, config]
+  );
 
   const quotaAwareAvailability = useCallback(
     (file: AuthFileItem): QuotaAvailability => {
       const snapshotAvailability = quotaHasAvailableCapacity(quota[file.name]);
       if (snapshotAvailability === true) {
-        if (isCredentialDisabled(file) || isCredentialUnauthorized(file)) {
+        if (
+          isCredentialArchived(file) ||
+          isCredentialDisabled(file) ||
+          isCredentialUnauthorized(file)
+        ) {
           return false;
         }
         if (
@@ -435,7 +427,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     goToLast,
     loading: sectionLoading,
     loadingScope,
-    setLoading
+    setLoading,
   } = useQuotaPagination(displayFiles);
 
   const refreshQuotaTargets = useCallback(
@@ -549,11 +541,14 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
     if (!nextRefreshAt) return;
 
-    const timeout = window.setTimeout(() => {
-      const nextNowMs = Date.now();
-      setAvailabilityNowMs(nextNowMs);
-      setSortNowMs(nextNowMs);
-    }, Math.max(1000, nextRefreshAt - nowMs + RESET_REFRESH_GRACE_MS));
+    const timeout = window.setTimeout(
+      () => {
+        const nextNowMs = Date.now();
+        setAvailabilityNowMs(nextNowMs);
+        setSortNowMs(nextNowMs);
+      },
+      Math.max(1000, nextRefreshAt - nowMs + RESET_REFRESH_GRACE_MS)
+    );
 
     return () => window.clearTimeout(timeout);
   }, [availabilityNowMs, loading, matchingFiles, pageItems, quota, sectionLoading]);
@@ -663,14 +658,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             showNotification(t('codex_quota.reset_success', { name: file.name }), 'success');
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : t('common.unknown_error');
-            showNotification(
-              t('codex_quota.reset_failed', { name: file.name, message }),
-              'error'
-            );
+            showNotification(t('codex_quota.reset_failed', { name: file.name, message }), 'error');
           } finally {
             setResettingQuotaName((current) => (current === file.name ? null : current));
           }
-        }
+        },
       });
     },
     [
@@ -682,18 +674,14 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       setQuota,
       showConfirmation,
       showNotification,
-      t
+      t,
     ]
   );
 
   const titleNode = (
     <div className={styles.titleWrapper}>
       <span>{t(`${config.i18nPrefix}.title`)}</span>
-      {displayFiles.length > 0 && (
-        <span className={styles.countBadge}>
-          {displayFiles.length}
-        </span>
-      )}
+      {displayFiles.length > 0 && <span className={styles.countBadge}>{displayFiles.length}</span>}
     </div>
   );
 
@@ -778,7 +766,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             <span className={styles.selectedSummary}>
               {t('quota_management.selected_count', { count: selectedTargets.length })}
             </span>
-            <div className={styles.listFilters} aria-label={t('quota_management.availability_filter')}>
+            <div
+              className={styles.listFilters}
+              aria-label={t('quota_management.availability_filter')}
+            >
               {AVAILABILITY_FILTERS.map((value) => (
                 <button
                   key={value}
@@ -835,28 +826,26 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                 const itemQuota = quota[item.name];
                 const isResettingQuota = resettingQuotaName === item.name;
                 const canUseQuotaAction =
-                  !disabled &&
-                  !item.disabled &&
-                  itemQuota?.status !== 'loading' &&
-                  !sectionLoading;
+                  !disabled && !item.disabled && itemQuota?.status !== 'loading' && !sectionLoading;
                 const showResetQuotaAction =
                   itemQuota !== undefined && Boolean(config.canResetQuota?.(itemQuota));
-                const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.quotaResetCreditButton}
-                    onClick={() => resetQuotaForFile(item)}
-                    disabled={!canUseQuotaAction || isResettingQuota}
-                    loading={isResettingQuota}
-                    title={t('codex_quota.reset_button')}
-                    aria-label={t('codex_quota.reset_button')}
-                  >
-                    {!isResettingQuota && <IconRefreshCw size={14} />}
-                    {t('codex_quota.reset_button')}
-                  </Button>
-                ) : undefined;
+                const resetQuotaAction =
+                  config.resetQuota && showResetQuotaAction ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className={styles.quotaResetCreditButton}
+                      onClick={() => resetQuotaForFile(item)}
+                      disabled={!canUseQuotaAction || isResettingQuota}
+                      loading={isResettingQuota}
+                      title={t('codex_quota.reset_button')}
+                      aria-label={t('codex_quota.reset_button')}
+                    >
+                      {!isResettingQuota && <IconRefreshCw size={14} />}
+                      {t('codex_quota.reset_button')}
+                    </Button>
+                  ) : undefined;
 
                 return (
                   <QuotaCard
@@ -887,7 +876,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                 {t('quota_management.pagination_info', {
                   current: currentPage,
                   total: totalPages,
-                  count: displayFiles.length
+                  count: displayFiles.length,
                 })}
               </span>
               <div>

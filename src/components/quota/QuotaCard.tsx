@@ -11,6 +11,7 @@ import type { AuthFileItem, CredentialTokenUsage, ResolvedTheme, ThemeColors } f
 import {
   getCredentialNextRetryAt,
   getCredentialStatusMessage,
+  isCredentialArchived,
   isCredentialDisabled,
   isQuotaCooldownMessage,
 } from '@/utils/authFileStatus';
@@ -38,10 +39,9 @@ export interface QuotaProgressBarProps {
 export function QuotaProgressBar({
   percent,
   highThreshold,
-  mediumThreshold
+  mediumThreshold,
 }: QuotaProgressBarProps) {
-  const clamp = (value: number, min: number, max: number) =>
-    Math.min(max, Math.max(min, value));
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
   const normalized = percent === null ? null : clamp(percent, 0, 100);
   const fillClass =
     normalized === null
@@ -99,7 +99,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
   canRefresh = false,
   onRefresh,
   resetQuotaAction,
-  renderQuotaItems
+  renderQuotaItems,
 }: QuotaCardProps<TState>) {
   const { t } = useTranslation();
 
@@ -147,7 +147,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
           style={{
             backgroundColor: typeColor.bg,
             color: typeColor.text,
-            ...(typeColor.border ? { border: typeColor.border } : {})
+            ...(typeColor.border ? { border: typeColor.border } : {}),
           }}
         >
           {getTypeLabel(displayType)}
@@ -186,7 +186,7 @@ export function QuotaCard<TState extends QuotaStatusState>({
         ) : quotaStatus === 'error' ? (
           <div className={styles.quotaError}>
             {t(`${i18nPrefix}.load_failed`, {
-              message: quotaErrorMessage
+              message: quotaErrorMessage,
             })}
           </div>
         ) : quota ? (
@@ -238,7 +238,9 @@ export function QuotaCard<TState extends QuotaStatusState>({
 
 const trimFileAffixes = (name: string, provider: string): string => {
   const withoutExt = name.replace(/\.json$/i, '');
-  const providerPrefix = provider ? new RegExp(`^${provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[-_.]?`, 'i') : null;
+  const providerPrefix = provider
+    ? new RegExp(`^${provider.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[-_.]?`, 'i')
+    : null;
   return (providerPrefix ? withoutExt.replace(providerPrefix, '') : withoutExt)
     .replace(/-(free|plus|pro|team|default)$/i, '')
     .trim();
@@ -282,6 +284,7 @@ const resolveAccountLabel = (item: AuthFileItem): string => {
 };
 
 const resolveStatusLabel = (item: AuthFileItem, t: TFunction): string => {
+  if (isCredentialArchived(item)) return t('quota_management.status_archived');
   if (isCredentialDisabled(item)) return t('quota_management.status_disabled');
   const nowMs = Date.now();
   const nextRetryAt = getCredentialNextRetryAt(item);
@@ -333,17 +336,22 @@ const resolveCredentialPlanLabel = (
   }
 
   if (normalizedType === 'claude') {
-    const planType = readRecordString(quotaRecord, 'planType') ?? readRecordString(quotaRecord, 'plan_type');
+    const planType =
+      readRecordString(quotaRecord, 'planType') ?? readRecordString(quotaRecord, 'plan_type');
     if (!planType) return null;
-    const key = planType.startsWith('plan_') ? `claude_quota.${planType}` : `claude_quota.plan_${planType}`;
+    const key = planType.startsWith('plan_')
+      ? `claude_quota.${planType}`
+      : `claude_quota.plan_${planType}`;
     const translated = t(key);
     return { label: translated === key ? planType : translated, premium: planType !== 'plan_free' };
   }
 
   if (normalizedType === 'gemini-cli') {
-    const tierLabel = readRecordString(quotaRecord, 'tierLabel') ?? readRecordString(quotaRecord, 'tier_label');
+    const tierLabel =
+      readRecordString(quotaRecord, 'tierLabel') ?? readRecordString(quotaRecord, 'tier_label');
     if (!tierLabel) return null;
-    const tierId = readRecordString(quotaRecord, 'tierId') ?? readRecordString(quotaRecord, 'tier_id');
+    const tierId =
+      readRecordString(quotaRecord, 'tierId') ?? readRecordString(quotaRecord, 'tier_id');
     return { label: tierLabel, premium: tierId === 'g1-ultra-tier' };
   }
 

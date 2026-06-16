@@ -6,6 +6,7 @@ import { SelectionCheckbox } from '@/components/ui/SelectionCheckbox';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import {
   IconDownload,
+  IconInbox,
   IconInfo,
   IconModelCluster,
   IconRefreshCw,
@@ -31,6 +32,7 @@ import {
   getAuthFileStatusMessage,
   getTypeColor,
   getTypeLabel,
+  isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
@@ -48,6 +50,7 @@ export type AuthFileTableProps = {
   disableControls: boolean;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
+  archiveUpdating: Record<string, boolean>;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   inspectionResults: Record<string, CredentialInspectionResult>;
   inspectionRunning: boolean;
@@ -56,6 +59,7 @@ export type AuthFileTableProps = {
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
+  onToggleArchive: (file: AuthFileItem, archived: boolean) => void;
   onToggleSelect: (name: string) => void;
   onSelectPage: (files: AuthFileItem[]) => void;
   onDeselectPage: (files: AuthFileItem[]) => void;
@@ -94,6 +98,7 @@ export function AuthFileTable({
   disableControls,
   deleting,
   statusUpdating,
+  archiveUpdating,
   statusBarCache,
   inspectionResults,
   inspectionRunning,
@@ -102,6 +107,7 @@ export function AuthFileTable({
   onOpenPrefixProxyEditor,
   onDelete,
   onToggleStatus,
+  onToggleArchive,
   onToggleSelect,
   onSelectPage,
   onDeselectPage,
@@ -138,6 +144,7 @@ export function AuthFileTable({
 
         {files.map((file) => {
           const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
+          const isArchived = isArchivedAuthFile(file);
           const selected = selectedFiles.has(file.name);
           const providerKey = normalizeProviderKey(String(file.type ?? file.provider ?? 'unknown'));
           const typeColor = getTypeColor(providerKey, resolvedTheme);
@@ -166,20 +173,24 @@ export function AuthFileTable({
                 : '';
           const stateLabel = isRuntimeOnly
             ? t('auth_files.type_virtual')
-            : file.disabled
-              ? t('auth_files.health_status_disabled')
-              : hasStatusWarning
-                ? t('auth_files.health_status_warning')
-                : rawStatusMessage
-                  ? t('auth_files.health_status_healthy')
-                  : t('auth_files.status_toggle_label');
+            : isArchived
+              ? t('auth_files.health_status_archived')
+              : file.disabled
+                ? t('auth_files.health_status_disabled')
+                : hasStatusWarning
+                  ? t('auth_files.health_status_warning')
+                  : rawStatusMessage
+                    ? t('auth_files.health_status_healthy')
+                    : t('auth_files.status_toggle_label');
           const stateBadgeClass = isRuntimeOnly
             ? styles.stateBadgeVirtual
-            : file.disabled
-              ? styles.stateBadgeDisabled
-              : hasStatusWarning
-                ? styles.stateBadgeWarning
-                : styles.stateBadgeActive;
+            : isArchived
+              ? styles.stateBadgeArchived
+              : file.disabled
+                ? styles.stateBadgeDisabled
+                : hasStatusWarning
+                  ? styles.stateBadgeWarning
+                  : styles.stateBadgeActive;
           const inspection = inspectionResults[file.name];
           const fileStats = {
             success: normalizeUsageTotal(file.success),
@@ -190,7 +201,7 @@ export function AuthFileTable({
           return (
             <div
               key={file.name}
-              className={`${styles.authTableRow} ${selected ? styles.authTableRowSelected : ''} ${file.disabled ? styles.authTableRowDisabled : ''}`}
+              className={`${styles.authTableRow} ${selected ? styles.authTableRowSelected : ''} ${file.disabled ? styles.authTableRowDisabled : ''} ${isArchived ? styles.authTableRowArchived : ''}`}
             >
               <div className={styles.authTableSelectCell}>
                 {!isRuntimeOnly && (
@@ -323,7 +334,7 @@ export function AuthFileTable({
                       onClick={() => onInspectOne(file)}
                       className={styles.iconButton}
                       title={t('auth_files.inspection_single_button')}
-                      disabled={disableControls || inspectionRunning}
+                      disabled={disableControls || inspectionRunning || isArchived}
                     >
                       <IconRefreshCw size={15} />
                     </Button>
@@ -347,11 +358,34 @@ export function AuthFileTable({
                     >
                       <IconSettings size={15} />
                     </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => onToggleArchive(file, !isArchived)}
+                      className={styles.iconButton}
+                      title={
+                        isArchived
+                          ? t('auth_files.unarchive_button')
+                          : t('auth_files.archive_button')
+                      }
+                      disabled={disableControls || archiveUpdating[file.name] === true}
+                    >
+                      {archiveUpdating[file.name] === true ? (
+                        <LoadingSpinner size={14} />
+                      ) : (
+                        <IconInbox size={15} />
+                      )}
+                    </Button>
                     <ToggleSwitch
                       checked={!file.disabled}
                       onChange={(enabled) => onToggleStatus(file, enabled)}
                       ariaLabel={t('auth_files.status_toggle_label')}
-                      disabled={disableControls || statusUpdating[file.name] === true}
+                      disabled={
+                        disableControls ||
+                        isArchived ||
+                        statusUpdating[file.name] === true ||
+                        archiveUpdating[file.name] === true
+                      }
                     />
                     <Button
                       variant="danger"

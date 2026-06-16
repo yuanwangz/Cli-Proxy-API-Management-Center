@@ -77,6 +77,7 @@ import {
   createStatusError,
   getStatusFromError,
   isAntigravityFile,
+  isArchivedAuthFile,
   isClaudeFile,
   isCodexFile,
   isDisabledAuthFile,
@@ -259,16 +260,13 @@ const quotaOverflowNode = (
   key = 'quota-overflow'
 ): ReactNode => {
   if (hiddenCount <= 0) return null;
-  return React.createElement(
-    QuotaOverflowPopover,
-    {
-      key,
-      count: hiddenCount,
-      items,
-      t,
-      styleMap: helpers.styles,
-    }
-  );
+  return React.createElement(QuotaOverflowPopover, {
+    key,
+    count: hiddenCount,
+    items,
+    t,
+    styleMap: helpers.styles,
+  });
 };
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
@@ -1006,8 +1004,7 @@ const renderAntigravityItems = (
   const popoverItems = groups.map((group) => {
     const remainingFraction =
       typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
-    const clamped =
-      remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
+    const clamped = remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
     const percent = clamped === null ? null : Math.round(clamped * 100);
     const percentLabel = percent === null ? '--' : `${percent}%`;
     return {
@@ -1020,8 +1017,7 @@ const renderAntigravityItems = (
   const nodes: ReactNode[] = visibleGroups.map((group) => {
     const remainingFraction =
       typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
-    const clamped =
-      remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
+    const clamped = remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
     const percent = clamped === null ? null : Math.round(clamped * 100);
     const percentLabel = percent === null ? '--' : `${percent}%`;
     const resetLabel = formatQuotaResetTime(group.resetTime);
@@ -1051,12 +1047,7 @@ const renderAntigravityItems = (
     );
   });
 
-  nodes.push(quotaOverflowNode(
-    hiddenGroups.length,
-    popoverItems,
-    t,
-    helpers
-  ));
+  nodes.push(quotaOverflowNode(hiddenGroups.length, popoverItems, t, helpers));
 
   return nodes;
 };
@@ -1071,8 +1062,7 @@ const renderCodexItems = (
   const windows = quota.windows ?? [];
   const planType = quota.planType ?? null;
   const subscriptionActiveUntil = quota.subscriptionActiveUntil ?? null;
-  const rateLimitResetCreditsAvailableCount =
-    quota.rateLimitResetCreditsAvailableCount ?? null;
+  const rateLimitResetCreditsAvailableCount = quota.rateLimitResetCreditsAvailableCount ?? null;
   const nodes: ReactNode[] = [];
 
   const getPlanLabel = (pt?: string | null): string | null => {
@@ -1153,11 +1143,7 @@ const renderCodexItems = (
 
   if (windows.length === 0) {
     nodes.push(
-      h(
-        'div',
-        { key: 'empty', className: styleMap.quotaMessage },
-        t('codex_quota.empty_windows')
-      )
+      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('codex_quota.empty_windows'))
     );
     return nodes;
   }
@@ -1260,8 +1246,7 @@ const renderGeminiCliItems = (
   const visibleBuckets = buckets.slice(0, bucketSlots);
   const hiddenBuckets = buckets.slice(bucketSlots);
   const popoverItems = buckets.map((bucket) => {
-    const fraction =
-      typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
+    const fraction = typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
     const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
     const percent = clamped === null ? null : Math.round(clamped * 100);
     const percentLabel = percent === null ? '--' : `${percent}%`;
@@ -1331,14 +1316,7 @@ const renderGeminiCliItems = (
     })
   );
 
-  nodes.push(
-    quotaOverflowNode(
-      hiddenBuckets.length,
-      popoverItems,
-      t,
-      helpers
-    )
-  );
+  nodes.push(quotaOverflowNode(hiddenBuckets.length, popoverItems, t, helpers));
 
   return h(Fragment, null, ...nodes);
 };
@@ -1554,14 +1532,7 @@ const renderClaudeItems = (
     })
   );
 
-  nodes.push(
-    quotaOverflowNode(
-      hiddenWindows.length,
-      popoverItems,
-      t,
-      helpers
-    )
-  );
+  nodes.push(quotaOverflowNode(hiddenWindows.length, popoverItems, t, helpers));
 
   return h(Fragment, null, ...nodes);
 };
@@ -1573,7 +1544,7 @@ export const CLAUDE_CONFIG: QuotaConfig<
   type: 'claude',
   i18nPrefix: 'claude_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
-  filterFn: (file) => isClaudeFile(file) && !isDisabledAuthFile(file),
+  filterFn: (file) => isClaudeFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchClaudeQuota,
   storeSelector: (state) => state.claudeQuota,
   storeSetter: 'setClaudeQuota',
@@ -1601,7 +1572,8 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
   type: 'antigravity',
   i18nPrefix: 'antigravity_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
-  filterFn: (file) => isAntigravityFile(file) && !isDisabledAuthFile(file),
+  filterFn: (file) =>
+    isAntigravityFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchAntigravityQuota,
   storeSelector: (state) => state.antigravityQuota,
   storeSetter: 'setAntigravityQuota',
@@ -1632,7 +1604,7 @@ export const CODEX_CONFIG: QuotaConfig<
   type: 'codex',
   i18nPrefix: 'codex_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
-  filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file),
+  filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchCodexQuota,
   resetQuota: resetCodexQuota,
   canResetQuota: (quota) => (quota.rateLimitResetCreditsAvailableCount ?? 0) > 0,
@@ -1674,7 +1646,10 @@ export const GEMINI_CLI_CONFIG: QuotaConfig<
   i18nPrefix: 'gemini_cli_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
   filterFn: (file) =>
-    isGeminiCliFile(file) && !isRuntimeOnlyAuthFile(file) && !isDisabledAuthFile(file),
+    isGeminiCliFile(file) &&
+    !isRuntimeOnlyAuthFile(file) &&
+    !isDisabledAuthFile(file) &&
+    !isArchivedAuthFile(file),
   fetchQuota: fetchGeminiCliQuota,
   storeSelector: (state) => state.geminiCliQuota,
   storeSetter: 'setGeminiCliQuota',
@@ -1765,7 +1740,7 @@ const renderKimiItems = (
     const percentLabel = remaining === null ? '--' : `${remaining}%`;
     const label = row.labelKey
       ? t(row.labelKey, (row.labelParams ?? {}) as Record<string, string | number>)
-      : row.label ?? '';
+      : (row.label ?? '');
     return {
       label,
       percentLabel,
@@ -1814,14 +1789,7 @@ const renderKimiItems = (
     );
   });
 
-  nodes.push(
-    quotaOverflowNode(
-      hiddenRows.length,
-      popoverItems,
-      t,
-      helpers
-    )
-  );
+  nodes.push(quotaOverflowNode(hiddenRows.length, popoverItems, t, helpers));
 
   return nodes;
 };
@@ -1975,7 +1943,7 @@ export const KIMI_CONFIG: QuotaConfig<KimiQuotaState, KimiQuotaRow[]> = {
   type: 'kimi',
   i18nPrefix: 'kimi_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
-  filterFn: (file) => isKimiFile(file) && !isDisabledAuthFile(file),
+  filterFn: (file) => isKimiFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchKimiQuota,
   storeSelector: (state) => state.kimiQuota,
   storeSetter: 'setKimiQuota',
@@ -1998,7 +1966,7 @@ export const XAI_CONFIG: QuotaConfig<XaiQuotaState, XaiBillingSummary> = {
   type: 'xai',
   i18nPrefix: 'xai_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
-  filterFn: (file) => isXaiFile(file) && !isDisabledAuthFile(file),
+  filterFn: (file) => isXaiFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchXaiQuota,
   storeSelector: (state) => state.xaiQuota,
   storeSetter: 'setXaiQuota',

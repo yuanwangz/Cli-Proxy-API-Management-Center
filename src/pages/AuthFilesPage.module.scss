@@ -562,7 +562,7 @@
 }
 
 .authTable {
-  min-width: 1000px;
+  min-width: 1060px;
 }
 
 .authTableHeader,
@@ -575,7 +575,7 @@
     minmax(160px, 0.82fr)
     minmax(120px, 0.62fr)
     minmax(110px, 0.52fr)
-    minmax(198px, 0.82fr);
+    minmax(232px, 0.92fr);
   gap: 6px;
   align-items: center;
 }
@@ -640,6 +640,21 @@
   .authInspectionCell,
   .authMetaCell {
     opacity: 0.72;
+  }
+}
+
+.authTableRowArchived {
+  background: color-mix(in srgb, var(--bg-tertiary) 34%, var(--bg-primary));
+
+  .authCredentialCell,
+  .authActivityCell,
+  .authInspectionCell,
+  .authMetaCell {
+    opacity: 0.68;
+  }
+
+  .authStatusCell {
+    opacity: 1;
   }
 }
 
@@ -1401,6 +1416,28 @@
   }
 }
 
+.fileCardArchived {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--bg-primary) 86%, var(--bg-tertiary)),
+    color-mix(in srgb, var(--bg-secondary) 76%, var(--bg-tertiary))
+  );
+  border-color: color-mix(in srgb, var(--border-color) 68%, var(--primary-color) 18%);
+
+  .providerAvatar,
+  .cardHeaderContent,
+  .cardMeta,
+  .healthStatusMessage,
+  .cardInsights {
+    opacity: 0.7;
+  }
+
+  .cardSelection,
+  .cardActions {
+    opacity: 1;
+  }
+}
+
 .fileCardLayout {
   display: flex;
   align-items: stretch;
@@ -1506,6 +1543,12 @@
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-tertiary) 86%, transparent);
   border: 1px solid var(--border-color);
+}
+
+.stateBadgeArchived {
+  color: color-mix(in srgb, var(--text-secondary) 82%, var(--primary-color));
+  background: color-mix(in srgb, var(--bg-tertiary) 76%, var(--primary-color) 8%);
+  border: 1px solid color-mix(in srgb, var(--border-color) 70%, var(--primary-color) 30%);
 }
 
 .stateBadgeVirtual {

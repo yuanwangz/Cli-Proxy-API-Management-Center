@@ -13,6 +13,7 @@ import { useNotificationStore, useQuotaStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
 import {
+  isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   resolveQuotaErrorMessage,
   type QuotaProviderType,
@@ -69,6 +70,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const refreshQuotaForFile = useCallback(async () => {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
+    if (isArchivedAuthFile(file)) return;
     if (file.disabled) return;
     if (quota?.status === 'loading') return;
 
@@ -107,6 +109,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const resetQuotaForFile = useCallback(() => {
     if (disableControls) return;
     if (isRuntimeOnlyAuthFile(file)) return;
+    if (isArchivedAuthFile(file)) return;
     if (file.disabled) return;
     if (quota?.status === 'loading') return;
     if (resettingQuota) return;
@@ -163,22 +166,23 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
-  const resetQuotaAction = config.resetQuota && showResetQuotaAction ? (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      className={styles.quotaResetCreditButton}
-      onClick={() => resetQuotaForFile()}
-      disabled={!canUseResetQuota}
-      loading={resettingQuota}
-      title={t('codex_quota.reset_button')}
-      aria-label={t('codex_quota.reset_button')}
-    >
-      {!resettingQuota && <IconRefreshCw size={14} />}
-      {t('codex_quota.reset_button')}
-    </Button>
-  ) : undefined;
+  const resetQuotaAction =
+    config.resetQuota && showResetQuotaAction ? (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className={styles.quotaResetCreditButton}
+        onClick={() => resetQuotaForFile()}
+        disabled={!canUseResetQuota}
+        loading={resettingQuota}
+        title={t('codex_quota.reset_button')}
+        aria-label={t('codex_quota.reset_button')}
+      >
+        {!resettingQuota && <IconRefreshCw size={14} />}
+        {t('codex_quota.reset_button')}
+      </Button>
+    ) : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(
     t,
     quota?.errorStatus,

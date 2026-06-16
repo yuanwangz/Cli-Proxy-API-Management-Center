@@ -11,17 +11,23 @@ import {
   getAuthFileStatusCode,
   getTypeLabel,
   hasAuthFileStatusMessage,
+  isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
-import type { AuthFilesStatusCodeFilter } from '@/features/authFiles/uiState';
+import type {
+  AuthFilesArchiveFilter,
+  AuthFilesStatusCodeFilter,
+} from '@/features/authFiles/uiState';
 
 type DeleteAllOptions = {
   filter: string;
+  archiveFilter: AuthFilesArchiveFilter;
   problemOnly: boolean;
   disabledOnly: boolean;
   statusCodeFilter: AuthFilesStatusCodeFilter;
   onResetFilterToAll: () => void;
+  onResetArchiveFilter: () => void;
   onResetProblemOnly: () => void;
   onResetDisabledOnly: () => void;
   onResetStatusCodeFilter: () => void;
@@ -38,6 +44,8 @@ export type UseAuthFilesDataResult = {
   deletingAll: boolean;
   statusUpdating: Record<string, boolean>;
   batchStatusUpdating: boolean;
+  archiveUpdating: Record<string, boolean>;
+  batchArchiveUpdating: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   loadFiles: () => Promise<void>;
   handleUploadClick: () => void;
@@ -46,6 +54,7 @@ export type UseAuthFilesDataResult = {
   handleDeleteAll: (options: DeleteAllOptions) => void;
   handleDownload: (name: string) => Promise<void>;
   handleStatusToggle: (item: AuthFileItem, enabled: boolean) => Promise<void>;
+  handleArchiveToggle: (item: AuthFileItem, archived: boolean) => Promise<void>;
   toggleSelect: (name: string) => void;
   selectAllVisible: (visibleFiles: AuthFileItem[]) => void;
   deselectVisible: (visibleFiles: AuthFileItem[]) => void;
@@ -53,6 +62,7 @@ export type UseAuthFilesDataResult = {
   deselectAll: () => void;
   batchDownload: (names: string[]) => Promise<void>;
   batchSetStatus: (names: string[], enabled: boolean) => Promise<void>;
+  batchSetArchived: (names: string[], archived: boolean) => Promise<void>;
   batchDelete: (names: string[]) => void;
 };
 
@@ -68,10 +78,13 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
   const [deletingAll, setDeletingAll] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
+  const [archiveUpdating, setArchiveUpdating] = useState<Record<string, boolean>>({});
+  const [batchArchiveUpdating, setBatchArchiveUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const batchStatusPendingRef = useRef(false);
+  const batchArchivePendingRef = useRef(false);
   const selectionCount = selectedFiles.size;
   const toggleSelect = useCallback((name: string) => {
     setSelectedFiles((prev) => {
@@ -291,19 +304,22 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     (deleteAllOptions: DeleteAllOptions) => {
       const {
         filter,
+        archiveFilter,
         problemOnly,
         disabledOnly,
         statusCodeFilter,
         onResetFilterToAll,
+        onResetArchiveFilter,
         onResetProblemOnly,
         onResetDisabledOnly,
         onResetStatusCodeFilter,
       } = deleteAllOptions;
       const isFiltered = filter !== 'all';
+      const isArchiveFiltered = archiveFilter !== 'all';
       const isProblemOnly = problemOnly === true;
       const isDisabledOnly = disabledOnly === true;
       const isStatusCodeFiltered = statusCodeFilter !== 'all';
-      const hasResultFilter = isDisabledOnly || isStatusCodeFiltered;
+      const hasResultFilter = isArchiveFiltered || isDisabledOnly || isStatusCodeFiltered;
       const typeLabel = isFiltered ? getTypeLabel(t, filter) : t('auth_files.filter_all');
       let confirmMessage = t('auth_files.delete_all_confirm');
       if (hasResultFilter) {
@@ -324,7 +340,13 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
         onConfirm: async () => {
           setDeletingAll(true);
           try {
-            if (!isFiltered && !isProblemOnly && !isDisabledOnly && !isStatusCodeFiltered) {
+            if (
+              !isFiltered &&
+              !isArchiveFiltered &&
+              !isProblemOnly &&
+              !isDisabledOnly &&
+              !isStatusCodeFiltered
+            ) {
               await authFilesApi.deleteAll();
               showNotification(t('auth_files.delete_all_success'), 'success');
               setFiles((prev) => prev.filter((file) => isRuntimeOnlyAuthFile(file)));
@@ -332,6 +354,8 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
             } else {
               const filesToDelete = files.filter((file) => {
                 if (isRuntimeOnlyAuthFile(file)) return false;
+                if (archiveFilter === 'active' && isArchivedAuthFile(file)) return false;
+                if (archiveFilter === 'archived' && !isArchivedAuthFile(file)) return false;
                 if (
                   isFiltered &&
                   normalizeProviderKey(String(file.type ?? file.provider ?? '')) !== filter
@@ -415,6 +439,9 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
               if (isFiltered) {
                 onResetFilterToAll();
               }
+              if (archiveFilter === 'archived') {
+                onResetArchiveFilter();
+              }
               if (isProblemOnly) {
                 onResetProblemOnly();
               }
@@ -483,6 +510,47 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
         showNotification(`${t('notification.update_failed')}: ${errorMessage}`, 'error');
       } finally {
         setStatusUpdating((prev) => {
+          if (!prev[name]) return prev;
+          const next = { ...prev };
+          delete next[name];
+          return next;
+        });
+      }
+    },
+    [showNotification, t]
+  );
+
+  const handleArchiveToggle = useCallback(
+    async (item: AuthFileItem, archived: boolean) => {
+      const name = item.name;
+      const previousArchived = isArchivedAuthFile(item);
+
+      setArchiveUpdating((prev) => ({ ...prev, [name]: true }));
+      setFiles((prev) => prev.map((f) => (f.name === name ? { ...f, archived } : f)));
+
+      try {
+        const res = await authFilesApi.setArchived(name, archived);
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.name === name
+              ? { ...f, archived: res.archived === undefined ? archived : res.archived }
+              : f
+          )
+        );
+        showNotification(
+          archived
+            ? t('auth_files.archive_success', { name })
+            : t('auth_files.unarchive_success', { name }),
+          'success'
+        );
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : '';
+        setFiles((prev) =>
+          prev.map((f) => (f.name === name ? { ...f, archived: previousArchived } : f))
+        );
+        showNotification(`${t('notification.update_failed')}: ${errorMessage}`, 'error');
+      } finally {
+        setArchiveUpdating((prev) => {
           if (!prev[name]) return prev;
           const next = { ...prev };
           delete next[name];
@@ -588,6 +656,102 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     [deselectAll, files, showNotification, statusUpdating, t]
   );
 
+  const batchSetArchived = useCallback(
+    async (names: string[], archived: boolean) => {
+      if (batchArchivePendingRef.current) return;
+
+      const uniqueNames = Array.from(new Set(names));
+      if (uniqueNames.length === 0) return;
+      if (uniqueNames.some((name) => archiveUpdating[name] === true)) return;
+
+      const originalArchived = new Map(
+        files
+          .filter((file) => uniqueNames.includes(file.name))
+          .map((file) => [file.name, isArchivedAuthFile(file)])
+      );
+      const targetNames = new Set(originalArchived.keys());
+      const targetNameList = Array.from(targetNames);
+      if (targetNameList.length === 0) return;
+
+      batchArchivePendingRef.current = true;
+      setBatchArchiveUpdating(true);
+      setArchiveUpdating((prev) => {
+        const next = { ...prev };
+        targetNameList.forEach((name) => {
+          next[name] = true;
+        });
+        return next;
+      });
+      setFiles((prev) =>
+        prev.map((file) => (targetNames.has(file.name) ? { ...file, archived } : file))
+      );
+
+      try {
+        const results = await Promise.allSettled(
+          targetNameList.map((name) => authFilesApi.setArchived(name, archived))
+        );
+
+        let successCount = 0;
+        let failCount = 0;
+        const failedNames = new Set<string>();
+        const confirmedArchived = new Map<string, boolean>();
+
+        results.forEach((result, index) => {
+          const name = targetNameList[index];
+          if (result.status === 'fulfilled') {
+            successCount++;
+            confirmedArchived.set(
+              name,
+              result.value.archived === undefined ? archived : result.value.archived
+            );
+          } else {
+            failCount++;
+            failedNames.add(name);
+          }
+        });
+
+        setFiles((prev) =>
+          prev.map((file) => {
+            if (failedNames.has(file.name)) {
+              return { ...file, archived: originalArchived.get(file.name) === true };
+            }
+            if (confirmedArchived.has(file.name)) {
+              return { ...file, archived: confirmedArchived.get(file.name) };
+            }
+            return file;
+          })
+        );
+
+        if (failCount === 0) {
+          showNotification(
+            archived
+              ? t('auth_files.batch_archive_success', { count: successCount })
+              : t('auth_files.batch_unarchive_success', { count: successCount }),
+            'success'
+          );
+        } else {
+          showNotification(
+            t('auth_files.batch_archive_partial', { success: successCount, failed: failCount }),
+            'warning'
+          );
+        }
+
+        deselectAll();
+      } finally {
+        batchArchivePendingRef.current = false;
+        setBatchArchiveUpdating(false);
+        setArchiveUpdating((prev) => {
+          const next = { ...prev };
+          targetNameList.forEach((name) => {
+            delete next[name];
+          });
+          return next;
+        });
+      }
+    },
+    [archiveUpdating, deselectAll, files, showNotification, t]
+  );
+
   const batchDownload = useCallback(
     async (names: string[]) => {
       const uniqueNames = Array.from(new Set(names));
@@ -676,6 +840,8 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     deletingAll,
     statusUpdating,
     batchStatusUpdating,
+    archiveUpdating,
+    batchArchiveUpdating,
     fileInputRef,
     loadFiles,
     handleUploadClick,
@@ -684,6 +850,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     handleDeleteAll,
     handleDownload,
     handleStatusToggle,
+    handleArchiveToggle,
     toggleSelect,
     selectAllVisible,
     deselectVisible,
@@ -691,6 +858,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     deselectAll,
     batchDownload,
     batchSetStatus,
+    batchSetArchived,
     batchDelete,
   };
 }

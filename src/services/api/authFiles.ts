@@ -9,7 +9,7 @@ import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
 import { parseTimestampMs } from '@/utils/timestamp';
 
 type StatusError = { status?: number };
-type AuthFileStatusResponse = { status: string; disabled: boolean };
+type AuthFileStatusResponse = { status: string; disabled: boolean; archived?: boolean };
 type AuthFileRefreshResponse = {
   status?: string;
   disabled?: boolean;
@@ -403,6 +403,9 @@ export const authFilesApi = {
 
   setStatus: (name: string, disabled: boolean) =>
     apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
+
+  setArchived: (name: string, archived: boolean) =>
+    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, archived }),
 
   refreshCredential: (name: string) =>
     apiClient.post<AuthFileRefreshResponse>('/auth-files/refresh', { name }),

@@ -34,6 +34,7 @@ import {
   getTypeColor,
   getTypeLabel,
   hasAuthFileStatusMessage,
+  isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
@@ -52,13 +53,16 @@ import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAut
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
 import {
   isAuthFilesSortMode,
+  isAuthFilesArchiveFilter,
   isAuthFilesStatusCodeFilter,
+  AUTH_FILES_ARCHIVE_FILTERS,
   AUTH_FILES_STATUS_CODE_FILTERS,
   readAuthFilesUiState,
   readPersistedAuthFilesCompactMode,
   writeAuthFilesUiState,
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
+  type AuthFilesArchiveFilter,
   type AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
 import { quotaApi } from '@/services/api';
@@ -96,6 +100,7 @@ export function AuthFilesPage() {
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<'all' | string>('all');
+  const [archiveFilter, setArchiveFilter] = useState<AuthFilesArchiveFilter>('active');
   const [problemOnly, setProblemOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [statusCodeFilter, setStatusCodeFilter] = useState<AuthFilesStatusCodeFilter>('all');
@@ -129,6 +134,8 @@ export function AuthFilesPage() {
     deletingAll,
     statusUpdating,
     batchStatusUpdating,
+    archiveUpdating,
+    batchArchiveUpdating,
     fileInputRef,
     loadFiles,
     handleUploadClick,
@@ -137,6 +144,7 @@ export function AuthFilesPage() {
     handleDeleteAll,
     handleDownload,
     handleStatusToggle,
+    handleArchiveToggle,
     toggleSelect,
     selectAllVisible,
     deselectVisible,
@@ -144,6 +152,7 @@ export function AuthFilesPage() {
     deselectAll,
     batchDownload,
     batchSetStatus,
+    batchSetArchived,
     batchDelete,
   } = useAuthFilesData();
 
@@ -217,6 +226,9 @@ export function AuthFilesPage() {
       if (typeof persisted.problemOnly === 'boolean') {
         setProblemOnly(persisted.problemOnly);
       }
+      if (isAuthFilesArchiveFilter(persisted.archiveFilter)) {
+        setArchiveFilter(persisted.archiveFilter);
+      }
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
       }
@@ -261,6 +273,7 @@ export function AuthFilesPage() {
 
     writeAuthFilesUiState({
       filter,
+      archiveFilter,
       problemOnly,
       disabledOnly,
       statusCodeFilter,
@@ -274,6 +287,7 @@ export function AuthFilesPage() {
     });
     writePersistedAuthFilesCompactMode(compactMode);
   }, [
+    archiveFilter,
     compactMode,
     disabledOnly,
     filter,
@@ -403,7 +417,7 @@ export function AuthFilesPage() {
     return Array.from(types);
   }, [files]);
 
-  const filesMatchingBaseStatusFilters = useMemo(
+  const filesMatchingResultFilters = useMemo(
     () =>
       files.filter((file) => {
         if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
@@ -411,6 +425,25 @@ export function AuthFilesPage() {
         return true;
       }),
     [disabledOnly, files, problemOnly]
+  );
+
+  const archiveFilterCounts = useMemo(() => {
+    const archived = filesMatchingResultFilters.filter(isArchivedAuthFile).length;
+    return {
+      active: filesMatchingResultFilters.length - archived,
+      archived,
+      all: filesMatchingResultFilters.length,
+    } satisfies Record<AuthFilesArchiveFilter, number>;
+  }, [filesMatchingResultFilters]);
+
+  const filesMatchingBaseStatusFilters = useMemo(
+    () =>
+      filesMatchingResultFilters.filter((file) => {
+        if (archiveFilter === 'active') return !isArchivedAuthFile(file);
+        if (archiveFilter === 'archived') return isArchivedAuthFile(file);
+        return true;
+      }),
+    [archiveFilter, filesMatchingResultFilters]
   );
 
   const statusCodeCounts = useMemo(() => {
@@ -514,11 +547,21 @@ export function AuthFilesPage() {
     () => selectedNames.some((name) => statusUpdating[name] === true),
     [selectedNames, statusUpdating]
   );
+  const selectedHasArchiveUpdating = useMemo(
+    () => selectedNames.some((name) => archiveUpdating[name] === true),
+    [archiveUpdating, selectedNames]
+  );
   const batchStatusButtonsDisabled =
     disableControls ||
     selectedNames.length === 0 ||
     batchStatusUpdating ||
-    selectedHasStatusUpdating;
+    selectedHasStatusUpdating ||
+    selectedHasArchiveUpdating;
+  const batchArchiveButtonsDisabled =
+    disableControls ||
+    selectedNames.length === 0 ||
+    batchArchiveUpdating ||
+    selectedHasArchiveUpdating;
   const selectedItems = useMemo(() => {
     if (selectedNames.length === 0) return [];
     const selectedNameSet = new Set(selectedNames);
@@ -761,7 +804,7 @@ export function AuthFilesPage() {
   );
 
   const deleteAllButtonLabel = (() => {
-    if (disabledOnly || statusCodeFilter !== 'all') {
+    if (archiveFilter !== 'all' || disabledOnly || statusCodeFilter !== 'all') {
       return t('auth_files.delete_filtered_result_button');
     }
     if (problemOnly) {
@@ -804,10 +847,12 @@ export function AuthFilesPage() {
               onClick={() =>
                 handleDeleteAll({
                   filter,
+                  archiveFilter,
                   problemOnly,
                   disabledOnly,
                   statusCodeFilter,
                   onResetFilterToAll: () => setFilter('all'),
+                  onResetArchiveFilter: () => setArchiveFilter('active'),
                   onResetProblemOnly: () => setProblemOnly(false),
                   onResetDisabledOnly: () => setDisabledOnly(false),
                   onResetStatusCodeFilter: () => setStatusCodeFilter('all'),
@@ -900,6 +945,28 @@ export function AuthFilesPage() {
                         >
                           <span>{t(labelKey)}</span>
                           <strong>{statusCodeCounts[value]}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className={`${styles.filterItem} ${styles.statusCodeFilterItem}`}>
+                  <label>{t('auth_files.archive_filter_label')}</label>
+                  <div className={styles.statusCodeFilterGroup}>
+                    {AUTH_FILES_ARCHIVE_FILTERS.map((value) => {
+                      const active = archiveFilter === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`${styles.statusCodeFilterButton} ${active ? styles.statusCodeFilterButtonActive : ''}`}
+                          onClick={() => {
+                            setArchiveFilter(value);
+                            setPage(1);
+                          }}
+                        >
+                          <span>{t(`auth_files.archive_filter_${value}`)}</span>
+                          <strong>{archiveFilterCounts[value]}</strong>
                         </button>
                       );
                     })}
@@ -1068,6 +1135,7 @@ export function AuthFilesPage() {
                 disableControls={disableControls}
                 deleting={deleting}
                 statusUpdating={statusUpdating}
+                archiveUpdating={archiveUpdating}
                 statusBarCache={statusBarCache}
                 inspectionResults={inspectionResults}
                 inspectionRunning={inspectionRunning}
@@ -1076,6 +1144,7 @@ export function AuthFilesPage() {
                 onOpenPrefixProxyEditor={openPrefixProxyEditor}
                 onDelete={handleDelete}
                 onToggleStatus={handleStatusToggle}
+                onToggleArchive={handleArchiveToggle}
                 onToggleSelect={toggleSelect}
                 onSelectPage={selectAllVisible}
                 onDeselectPage={deselectVisible}
@@ -1217,6 +1286,22 @@ export function AuthFilesPage() {
                     disabled={disableControls || selectedNames.length === 0}
                   >
                     {t('auth_files.batch_download')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void batchSetArchived(selectedNames, true)}
+                    disabled={batchArchiveButtonsDisabled}
+                  >
+                    {t('auth_files.batch_archive')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void batchSetArchived(selectedNames, false)}
+                    disabled={batchArchiveButtonsDisabled}
+                  >
+                    {t('auth_files.batch_unarchive')}
                   </Button>
                   <Button
                     size="sm"

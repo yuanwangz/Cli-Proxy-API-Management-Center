@@ -32,6 +32,14 @@ export const isCredentialDisabled = (file: AuthFileItem): boolean => {
   return false;
 };
 
+export const isCredentialArchived = (file: AuthFileItem): boolean => {
+  const raw = (file.archived ?? file['archived']) as unknown;
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
+  return false;
+};
+
 export const getCredentialNextRetryAt = (file: AuthFileItem): number =>
   parseCredentialTimeMs(file['next_retry_after'] ?? file.nextRetryAfter);
 
@@ -48,6 +56,7 @@ export const isQuotaCooldownMessage = (message: string): boolean =>
   QUOTA_COOLDOWN_PATTERN.test(message);
 
 export const isCredentialCooling = (file: AuthFileItem, nowMs = Date.now()): boolean => {
+  if (isCredentialArchived(file)) return false;
   if (isCredentialDisabled(file)) return false;
   const nextRetryAt = getCredentialNextRetryAt(file);
   return nextRetryAt > nowMs && isQuotaCooldownMessage(getCredentialStatusMessage(file));
@@ -57,6 +66,7 @@ export const isCredentialEffectivelyUnavailable = (
   file: AuthFileItem,
   nowMs = Date.now()
 ): boolean => {
+  if (isCredentialArchived(file)) return true;
   if (isCredentialDisabled(file)) return true;
   const nextRetryAt = getCredentialNextRetryAt(file);
   if (nextRetryAt > nowMs) return true;
@@ -64,15 +74,17 @@ export const isCredentialEffectivelyUnavailable = (
   return Boolean(file.unavailable);
 };
 
-export const isCredentialEffectivelyAvailable = (
-  file: AuthFileItem,
-  nowMs = Date.now()
-): boolean => !isCredentialDisabled(file) && !isCredentialEffectivelyUnavailable(file, nowMs);
+export const isCredentialEffectivelyAvailable = (file: AuthFileItem, nowMs = Date.now()): boolean =>
+  !isCredentialArchived(file) &&
+  !isCredentialDisabled(file) &&
+  !isCredentialEffectivelyUnavailable(file, nowMs);
 
 export const isCredentialQuotaLimited = (file: AuthFileItem, nowMs = Date.now()): boolean =>
+  !isCredentialArchived(file) &&
   !isCredentialDisabled(file) &&
   (isCredentialCooling(file, nowMs) ||
-    (getCredentialStatusCode(file) === 429 && isQuotaCooldownMessage(getCredentialStatusMessage(file))));
+    (getCredentialStatusCode(file) === 429 &&
+      isQuotaCooldownMessage(getCredentialStatusMessage(file))));
 
 export const isCredentialUnauthorized = (file: AuthFileItem): boolean => {
   if (isCredentialDisabled(file)) return false;

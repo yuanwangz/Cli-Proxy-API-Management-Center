@@ -60,3 +60,11 @@ export function isDisabledAuthFile(file: AuthFileItem): boolean {
   if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
   return false;
 }
+
+export function isArchivedAuthFile(file: AuthFileItem): boolean {
+  const raw = (file as { archived?: unknown }).archived ?? file['archived'];
+  if (typeof raw === 'boolean') return raw;
+  if (typeof raw === 'number') return raw !== 0;
+  if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
+  return false;
+}

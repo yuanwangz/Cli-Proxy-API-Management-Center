@@ -278,6 +278,11 @@ export function isRuntimeOnlyAuthFile(file: AuthFileItem): boolean {
   return false;
 }
 
+export function isArchivedAuthFile(file: AuthFileItem): boolean {
+  const raw = file.archived ?? file['archived'];
+  return parseDisableCoolingValue(raw) === true;
+}
+
 const formatAuthDateValue = (raw: unknown): string => {
   if (!raw) return '-';
   const asNumber = Number(raw);
