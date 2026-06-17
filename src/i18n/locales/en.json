@@ -150,7 +150,7 @@
     "quick_actions": "Quick Actions",
     "current_config": "Current Configuration",
     "management_keys": "Management Keys",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}} Amp:{{ampcode}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}}",
     "oauth_credentials": "OAuth Credentials",
     "edit_settings": "Edit Settings",
     "routing_strategy": "Routing Strategy",
@@ -444,7 +444,16 @@
     "loading": "Loading quota...",
     "load_failed": "Failed to load quota: {{message}}",
     "missing_auth_index": "Auth file missing auth_index",
+    "missing_project_id": "Antigravity credential missing project_id. Re-login or refresh the credential to discover the project.",
     "empty_models": "No quota data available",
+    "quota_available": "Quota available",
+    "remaining_percent": "{{percent}}% remaining",
+    "refreshes_in": "Refreshes in {{duration}}",
+    "refresh_available": "Refresh available",
+    "duration_day_hour": "{{days}}d {{hours}}h",
+    "duration_hour_minute": "{{hours}}h {{minutes}}m",
+    "duration_minute": "{{minutes}}m",
+    "duration_less_than_minute": "<1m",
     "refresh_button": "Refresh Quota",
     "fetch_all": "Fetch All"
   },
@@ -503,7 +512,7 @@
     "observed_additional_secondary_window": "{{name}} {{duration}} limit",
     "additional_team_secondary_window": "{{name}} monthly limit",
     "plan_label": "Plan",
-    "expires_label": "Expires",
+    "expires_label": "Renewal time",
     "reset_credits_label": "Manual resets",
     "reset_button": "Reset quota",
     "reset_confirm_title": "Reset Codex quota",
@@ -982,6 +991,11 @@
           "logging_to_file_desc": "Save logs to files",
           "plugins_enabled": "Enable Plugin System",
           "plugins_enabled_desc": "Enable standard dynamic-library plugin loading; individual plugin instances are still managed on the Plugins page",
+          "plugin_store_sources": "Third-party Plugin Sources",
+          "plugin_store_sources_desc": "Append plugin-store registry sources; the built-in official source is always kept",
+          "plugin_store_sources_label": "Plugin source registry URL (plugins.store-sources)",
+          "plugin_store_sources_placeholder": "https://example.com/cliproxy-plugins/registry.json",
+          "plugin_store_sources_hint": "One registry.json URL per row. Empty rows are filtered on save",
           "logs_max_size": "Log File Size Limit (MB)",
           "error_logs_max_files": "Retained Error Log Files",
           "usage_statistics_enabled": "Enable In-memory Usage Statistics",
@@ -1260,6 +1274,7 @@
     "delete_restart_required": "The loaded plugin cannot be removed until the backend restarts.",
     "toggle_success": "Plugin status updated",
     "toggle_failed": "Failed to update plugin status",
+    "runtime_pending": "Plugin change was saved, but the runtime state is still pending. Refresh later or check backend logs.",
     "save_success": "Plugin config saved",
     "save_failed": "Failed to save plugin config",
     "validation_failed": "Fix plugin config form errors first",
@@ -1276,6 +1291,8 @@
     "description": "Browse the plugin registry, then install or update plugins for the current backend.",
     "description_show_more": "Show more",
     "description_show_less": "Show less",
+    "source_name": "Source: {{source}}",
+    "cli_proxy_api_source": "CLIProxyAPI source",
     "refresh": "Refresh",
     "retry": "Retry",
     "load_failed": "Failed to load the plugin store",
@@ -1309,6 +1326,8 @@
     "update_success": "Plugin updated",
     "install_failed": "Failed to install plugin",
     "update_failed": "Failed to update plugin",
+    "status_pending": "Plugin files were updated, but the local status has not refreshed yet. Refresh later or check backend logs.",
+    "registration_pending": "Plugin files were updated, but registration is still pending. Refresh later or check backend logs.",
     "restart_required_notice": "Restart the service to load the new plugin version",
     "restart_required_banner": "Restart the service to apply the new version of: {{plugins}}",
     "open_repository": "Open repository",
@@ -1317,7 +1336,24 @@
     "no_plugins_desc": "The plugin registry did not return any plugins.",
     "no_matches": "No matching plugins",
     "no_matches_desc": "No plugins match the current search or filter.",
-    "clear_filters": "Clear filters"
+    "clear_filters": "Clear filters",
+    "security_banner_title": "Third-party plugins run with full backend access",
+    "security_banner_text": "Plugins execute code inside the proxy service and can read your credentials and traffic. Only install plugins you trust — be especially careful with any plugin not published by the official router-for-me organization.",
+    "badge_untrusted": "Third-party",
+    "gate_title": "Install {{name}}",
+    "gate_title_update": "Update {{name}}",
+    "gate_warning": "Unexpected and harmful things can happen if you don't read this.",
+    "gate_effect_runs_code": "This plugin will run uncertified third-party code inside your proxy backend. The system cannot isolate or audit its behavior, and it may have access to your sensitive credentials, network requests, and response data.",
+    "gate_effect_no_review": "This plugin is not published or reviewed by the official router-for-me organization. The official organization makes no express or implied warranty for this plugin's stability, security, compliance, or any behavior changes in future versions.",
+    "gate_effect_restart": "Installing it changes the local plugin directory and may require a service restart to take effect.",
+    "gate_untrusted_alert": "This plugin is not from the official router-for-me organization. Only continue if you fully trust its author and source.",
+    "gate_repository_label": "Repository",
+    "gate_source_label": "Source",
+    "gate_step1_action": "I want to install this plugin",
+    "gate_step2_action": "I have read and understand these risks",
+    "gate_step3_prompt": "To confirm, type \"{{token}}\" in the box below",
+    "gate_step3_action": "Install this plugin",
+    "gate_step3_hint": "Enter the exact identifier shown above to enable installation."
   },
   "plugin_resource": {
     "title": "Plugin Page",
@@ -1412,8 +1448,6 @@
     "openai_provider_added": "OpenAI provider added successfully",
     "openai_provider_updated": "OpenAI provider updated successfully",
     "openai_provider_deleted": "OpenAI provider deleted successfully",
-    "ampcode_updated": "Ampcode configuration updated",
-    "ampcode_upstream_api_key_cleared": "Ampcode upstream API key override cleared",
     "openai_model_name_required": "Model name is required",
     "openai_test_url_required": "Please provide a valid Base URL before testing",
     "openai_test_key_required": "Please add at least one API key before testing",
@@ -1492,17 +1526,14 @@
     },
     "categories": {
       "title": "Providers",
-      "activeCount": "{{active}}/{{total}} active",
-      "ampcodeActive": "Connected",
-      "ampcodeInactive": "Not configured"
+      "activeCount": "{{active}}/{{total}} active"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI Compatible",
-      "ampcode": "Amp CLI"
+      "openaiCompatibility": "OpenAI Compatible"
     },
     "table": {
       "key": "Key",
@@ -1514,12 +1545,10 @@
       "metrics": {
         "models": "Models",
         "keys": "Keys",
-        "headers": "Headers",
-        "mappings": "Mappings"
+        "headers": "Headers"
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
-      "noFallbackKey": "No fallback key",
       "empty": "No resources yet, click \"New\" to add.",
       "filterPlaceholder": "Search keys, URLs, prefixes…",
       "description": "Manage resources under {{route}}",
@@ -1617,25 +1646,9 @@
         "baseUrlRequired": "Base URL is required"
       }
     },
-    "ampcode": {
-      "upstreamUrl": "Upstream URL",
-      "upstreamApiKey": "Upstream API key (fallback)",
-      "upstreamApiKeyHint": "Used when no key mapping matches",
-      "keyMappingsSection": "Upstream key mappings",
-      "mappingRow": "Mapping #{{index}}",
-      "clientKeys": "Client keys",
-      "clientKeysHint": "One per line; matched keys forward to the upstream key above",
-      "addMapping": "Add key mapping",
-      "modelMappingsSection": "Model mappings",
-      "addModelMapping": "Add model mapping",
-      "forceModelMappings": "Force model mappings",
-      "forceModelMappingsHint": "Requests that don't match a mapping are rejected"
-    },
     "delete": {
       "title": "Delete resource",
-      "confirm": "Delete {{name}}? This action cannot be undone.",
-      "ampcodeTitle": "Clear Amp CLI configuration",
-      "ampcodeConfirm": "Clear all Amp CLI configuration? Upstream URL, keys and model mappings will be removed."
+      "confirm": "Delete {{name}}? This action cannot be undone."
     },
     "toast": {
       "created": "Created",

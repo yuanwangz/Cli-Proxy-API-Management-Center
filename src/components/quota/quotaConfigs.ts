@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import type {
   AntigravityQuotaGroup,
-  AntigravityModelsPayload,
+  AntigravityQuotaSummaryPayload,
   AntigravityQuotaState,
   AuthFileItem,
   ClaudeExtraUsage,
@@ -95,7 +95,11 @@ type QuotaUpdater<T> = T | ((prev: T) => T);
 
 type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
 
-const DEFAULT_ANTIGRAVITY_PROJECT_ID = 'bamboo-precept-lgxtn';
+type AntigravityQuotaData = {
+  groups: AntigravityQuotaGroup[];
+  serverTimeOffsetMs: number | null;
+};
+
 const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
 const INLINE_QUOTA_ITEM_LIMIT = 3;
@@ -270,10 +274,33 @@ const quotaOverflowNode = (
 };
 
 const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> => {
+  const directProjectId = normalizeStringValue(file.project_id ?? file.projectId);
+  if (directProjectId) return directProjectId;
+
+  const metadata =
+    file.metadata && typeof file.metadata === 'object' && file.metadata !== null
+      ? (file.metadata as Record<string, unknown>)
+      : null;
+  const metadataProjectId = metadata
+    ? normalizeStringValue(metadata.project_id ?? metadata.projectId)
+    : null;
+  if (metadataProjectId) return metadataProjectId;
+
+  const attributes =
+    file.attributes && typeof file.attributes === 'object' && file.attributes !== null
+      ? (file.attributes as Record<string, unknown>)
+      : null;
+  const attributesProjectId = attributes
+    ? normalizeStringValue(
+        attributes.project_id ?? attributes.projectId ?? attributes.gemini_virtual_project
+      )
+    : null;
+  if (attributesProjectId) return attributesProjectId;
+
   try {
     const text = await authFilesApi.downloadText(file.name);
     const trimmed = text.trim();
-    if (!trimmed) return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+    if (!trimmed) return '';
 
     const parsed = JSON.parse(trimmed) as Record<string, unknown>;
     const topLevel = normalizeStringValue(parsed.project_id ?? parsed.projectId);
@@ -295,16 +322,28 @@ const resolveAntigravityProjectId = async (file: AuthFileItem): Promise<string> 
     const webProjectId = web ? normalizeStringValue(web.project_id ?? web.projectId) : null;
     if (webProjectId) return webProjectId;
   } catch {
-    return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+    return '';
   }
 
-  return DEFAULT_ANTIGRAVITY_PROJECT_ID;
+  return '';
+};
+
+const resolveResponseServerTimeOffsetMs = (
+  header: Record<string, string[]> | undefined
+): number | null => {
+  if (!header) return null;
+  const dateEntry = Object.entries(header).find(([key]) => key.toLowerCase() === 'date');
+  const rawDate = dateEntry?.[1]?.[0];
+  if (!rawDate) return null;
+  const serverTime = new Date(rawDate).getTime();
+  if (Number.isNaN(serverTime)) return null;
+  return serverTime - Date.now();
 };
 
 const fetchAntigravityQuota = async (
   file: AuthFileItem,
   t: TFunction
-): Promise<AntigravityQuotaGroup[]> => {
+): Promise<AntigravityQuotaData> => {
   const rawAuthIndex = file['auth_index'] ?? file.authIndex;
   const authIndex = normalizeAuthIndex(rawAuthIndex);
   if (!authIndex) {
@@ -312,6 +351,9 @@ const fetchAntigravityQuota = async (
   }
 
   const projectId = await resolveAntigravityProjectId(file);
+  if (!projectId) {
+    throw new Error(t('antigravity_quota.missing_project_id'));
+  }
   const requestBody = JSON.stringify({ project: projectId });
 
   let lastError = '';
@@ -339,20 +381,24 @@ const fetchAntigravityQuota = async (
       }
 
       hadSuccess = true;
-      const payload = parseAntigravityPayload(result.body ?? result.bodyText);
-      const models = payload?.models;
-      if (!models || typeof models !== 'object' || Array.isArray(models)) {
+      const payload = parseAntigravityPayload(
+        result.body ?? result.bodyText
+      ) as AntigravityQuotaSummaryPayload | null;
+      if (!payload || !Array.isArray(payload.groups)) {
         lastError = t('antigravity_quota.empty_models');
         continue;
       }
 
-      const groups = buildAntigravityQuotaGroups(models as AntigravityModelsPayload);
+      const groups = buildAntigravityQuotaGroups(payload);
       if (groups.length === 0) {
         lastError = t('antigravity_quota.empty_models');
         continue;
       }
 
-      return groups;
+      return {
+        groups,
+        serverTimeOffsetMs: resolveResponseServerTimeOffsetMs(result.header),
+      };
     } catch (err: unknown) {
       lastError = err instanceof Error ? err.message : t('common.unknown_error');
       const status = getStatusFromError(err);
@@ -366,20 +412,17 @@ const fetchAntigravityQuota = async (
   }
 
   if (hadSuccess) {
-    return [];
+    return { groups: [], serverTimeOffsetMs: null };
   }
 
   throw createStatusError(lastError || t('common.unknown_error'), priorityStatus ?? lastStatus);
 };
 
-const buildCodexQuotaWindows = (
-  payload: CodexUsagePayload,
-  t: TFunction,
-  planType?: string | null
-): CodexQuotaWindow[] => {
+const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): CodexQuotaWindow[] => {
   const FIVE_HOUR_SECONDS = 18000;
   const WEEK_SECONDS = 604800;
-  const isTeamPlan = normalizePlanType(planType) === 'team';
+  const MIN_MONTH_SECONDS = 28 * 24 * 60 * 60;
+  const MAX_MONTH_SECONDS = 31 * 24 * 60 * 60;
   const WINDOW_META = {
     codeFiveHour: { id: 'five-hour', labelKey: 'codex_quota.primary_window' },
     codeWeekly: { id: 'weekly', labelKey: 'codex_quota.secondary_window' },
@@ -450,6 +493,20 @@ const buildCodexQuotaWindows = (
     return normalizeNumberValue(window.limit_window_seconds ?? window.limitWindowSeconds);
   };
 
+  const isMonthlyWindow = (window?: CodexUsageWindow | null): boolean => {
+    const seconds = getWindowSeconds(window);
+    return seconds !== null && seconds >= MIN_MONTH_SECONDS && seconds <= MAX_MONTH_SECONDS;
+  };
+
+  const selectSecondaryWindowMeta = <
+    TWeekly extends { id: string; labelKey: string },
+    TMonthly extends { id: string; labelKey: string },
+  >(
+    window: CodexUsageWindow | null | undefined,
+    weeklyMeta: TWeekly,
+    monthlyMeta: TMonthly
+  ): TWeekly | TMonthly => (isMonthlyWindow(window) ? monthlyMeta : weeklyMeta);
+
   const rawLimitReached = rateLimit?.limit_reached ?? rateLimit?.limitReached;
   const rawAllowed = rateLimit?.allowed;
 
@@ -470,7 +527,7 @@ const buildCodexQuotaWindows = (
       const seconds = getWindowSeconds(window);
       if (seconds === FIVE_HOUR_SECONDS && !fiveHourWindow) {
         fiveHourWindow = window;
-      } else if (seconds === WEEK_SECONDS && !weeklyWindow) {
+      } else if ((seconds === WEEK_SECONDS || isMonthlyWindow(window)) && !weeklyWindow) {
         weeklyWindow = window;
       }
     }
@@ -499,7 +556,11 @@ const buildCodexQuotaWindows = (
     rawLimitReached,
     rawAllowed
   );
-  const codeSecondaryWindowMeta = isTeamPlan ? WINDOW_META.codeMonthly : WINDOW_META.codeWeekly;
+  const codeSecondaryWindowMeta = selectSecondaryWindowMeta(
+    rateWindows.weeklyWindow,
+    WINDOW_META.codeWeekly,
+    WINDOW_META.codeMonthly
+  );
   addWindow(
     codeSecondaryWindowMeta.id,
     t(codeSecondaryWindowMeta.labelKey),
@@ -522,9 +583,11 @@ const buildCodexQuotaWindows = (
     codeReviewLimitReached,
     codeReviewAllowed
   );
-  const codeReviewSecondaryWindowMeta = isTeamPlan
-    ? WINDOW_META.codeReviewMonthly
-    : WINDOW_META.codeReviewWeekly;
+  const codeReviewSecondaryWindowMeta = selectSecondaryWindowMeta(
+    codeReviewWindows.weeklyWindow,
+    WINDOW_META.codeReviewWeekly,
+    WINDOW_META.codeReviewMonthly
+  );
   addWindow(
     codeReviewSecondaryWindowMeta.id,
     t(codeReviewSecondaryWindowMeta.labelKey),
@@ -568,14 +631,15 @@ const buildCodexQuotaWindows = (
         additionalLimitReached,
         additionalAllowed
       );
-      const additionalSecondaryLabelKey = isTeamPlan
-        ? 'codex_quota.additional_team_secondary_window'
-        : 'codex_quota.additional_secondary_window';
-      const additionalSecondaryId = isTeamPlan ? 'monthly' : 'weekly';
+      const additionalSecondaryMeta = selectSecondaryWindowMeta(
+        additionalSecondaryWindow,
+        { id: 'weekly', labelKey: 'codex_quota.additional_secondary_window' },
+        { id: 'monthly', labelKey: 'codex_quota.additional_team_secondary_window' }
+      );
       addWindow(
-        `${idPrefix}-${additionalSecondaryId}-${index}`,
-        t(additionalSecondaryLabelKey, { name: limitName }),
-        additionalSecondaryLabelKey,
+        `${idPrefix}-${additionalSecondaryMeta.id}-${index}`,
+        t(additionalSecondaryMeta.labelKey, { name: limitName }),
+        additionalSecondaryMeta.labelKey,
         { name: limitName },
         additionalSecondaryWindow,
         additionalLimitReached,
@@ -635,7 +699,7 @@ const fetchCodexQuota = async (
     resetCredits?.available_count ?? resetCredits?.availableCount
   );
   const planType = planTypeFromUsage ?? planTypeFromFile;
-  const windows = buildCodexQuotaWindows(payload, t, planType);
+  const windows = buildCodexQuotaWindows(payload, t);
   return {
     planType,
     subscriptionActiveUntil,
@@ -986,70 +1050,127 @@ const fetchGeminiCliQuota = async (
   };
 };
 
+const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
+  const totalMinutes = Math.max(1, Math.ceil(deltaMs / 60000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return t('antigravity_quota.duration_day_hour', {
+      days,
+      hours,
+    });
+  }
+  if (hours > 0) {
+    return t('antigravity_quota.duration_hour_minute', {
+      hours,
+      minutes,
+    });
+  }
+  if (minutes > 0) {
+    return t('antigravity_quota.duration_minute', {
+      minutes,
+    });
+  }
+  return t('antigravity_quota.duration_less_than_minute');
+};
+
+const formatAntigravityResetLabel = (
+  resetTime: string | undefined,
+  t: TFunction,
+  nowMs: number
+): string => {
+  if (!resetTime) return '-';
+  const resetMs = new Date(resetTime).getTime();
+  if (Number.isNaN(resetMs)) return '-';
+  const deltaMs = resetMs - nowMs;
+  if (deltaMs <= 0) return t('antigravity_quota.refresh_available');
+  return t('antigravity_quota.refreshes_in', {
+    duration: formatAntigravityDuration(t, deltaMs),
+  });
+};
+
 const renderAntigravityItems = (
   quota: AntigravityQuotaState,
   t: TFunction,
   helpers: QuotaRenderHelpers
 ): ReactNode => {
   const { styles: styleMap, QuotaProgressBar } = helpers;
-  const { createElement: h } = React;
+  const { createElement: h, Fragment } = React;
   const groups = quota.groups ?? [];
 
   if (groups.length === 0) {
     return h('div', { className: styleMap.quotaMessage }, t('antigravity_quota.empty_models'));
   }
 
-  const visibleGroups = groups.slice(0, INLINE_QUOTA_ITEM_LIMIT);
-  const hiddenGroups = groups.slice(INLINE_QUOTA_ITEM_LIMIT);
-  const popoverItems = groups.map((group) => {
-    const remainingFraction =
-      typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
-    const clamped = remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
-    const percent = clamped === null ? null : Math.round(clamped * 100);
-    const percentLabel = percent === null ? '--' : `${percent}%`;
-    return {
-      label: group.label,
-      percentLabel,
-      resetLabel: formatQuotaResetTimeFull(group.resetTime),
-      title: group.models.join(', '),
-    };
-  });
-  const nodes: ReactNode[] = visibleGroups.map((group) => {
-    const remainingFraction =
-      typeof group.remainingFraction === 'number' ? group.remainingFraction : null;
-    const clamped = remainingFraction === null ? null : Math.max(0, Math.min(1, remainingFraction));
-    const percent = clamped === null ? null : Math.round(clamped * 100);
-    const percentLabel = percent === null ? '--' : `${percent}%`;
-    const resetLabel = formatQuotaResetTime(group.resetTime);
+  const nowMs = Date.now() + (quota.serverTimeOffsetMs ?? 0);
+  const popoverItems: QuotaPopoverItem[] = [];
+  let renderedBucketCount = 0;
 
-    return h(
-      'div',
-      {
-        key: group.id,
-        className: `${styleMap.quotaRow} ${groups.length > 1 ? styleMap.quotaRowCondensed : ''}`,
-      },
-      h(
+  const nodes: ReactNode[] = groups.map((group) => {
+    const bucketNodes = group.buckets.map((bucket) => {
+      const clamped = Math.max(0, Math.min(1, bucket.remainingFraction));
+      const percent = clamped * 100;
+      const percentLabel =
+        bucket.remainingFraction === 1
+          ? t('antigravity_quota.quota_available')
+          : t('antigravity_quota.remaining_percent', {
+              percent: Math.round(percent),
+            });
+      const resetLabel = formatAntigravityResetLabel(bucket.resetTime, t, nowMs);
+      popoverItems.push({
+        label: `${group.label} · ${bucket.label}`,
+        percentLabel,
+        resetLabel: formatQuotaResetTimeFull(bucket.resetTime) || resetLabel,
+        title: bucket.description,
+      });
+
+      if (renderedBucketCount >= INLINE_QUOTA_ITEM_LIMIT) return null;
+      renderedBucketCount += 1;
+
+      return h(
         'div',
-        { className: styleMap.quotaRowHeader },
-        h('span', { className: styleMap.quotaModel, title: group.models.join(', ') }, group.label),
+        { key: bucket.id, className: styleMap.quotaRow },
         h(
           'div',
-          { className: styleMap.quotaMeta },
-          h('span', { className: styleMap.quotaPercent }, percentLabel),
-          h('span', { className: styleMap.quotaReset }, resetLabel)
-        )
+          { className: styleMap.quotaRowHeader },
+          h('span', { className: styleMap.quotaModel, title: bucket.description }, bucket.label),
+          h(
+            'div',
+            { className: styleMap.quotaMeta },
+            h('span', { className: styleMap.quotaPercent }, percentLabel),
+            h('span', { className: styleMap.quotaReset }, resetLabel)
+          )
+        ),
+        h(QuotaProgressBar, {
+          percent,
+          highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+          mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+        })
+      );
+    });
+
+    if (bucketNodes.every((node) => node === null)) return null;
+    return h(
+      'div',
+      { key: group.id, className: styleMap.antigravityQuotaGroup },
+      h(
+        'div',
+        { className: styleMap.antigravityQuotaGroupHeader },
+        h('span', { className: styleMap.antigravityQuotaGroupTitle }, group.label),
+        group.description
+          ? h('span', { className: styleMap.antigravityQuotaGroupDescription }, group.description)
+          : null
       ),
-      h(QuotaProgressBar, {
-        percent,
-        highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-        mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-      })
+      ...bucketNodes
     );
   });
 
-  nodes.push(quotaOverflowNode(hiddenGroups.length, popoverItems, t, helpers));
+  const hiddenCount = Math.max(0, popoverItems.length - INLINE_QUOTA_ITEM_LIMIT);
+  nodes.push(quotaOverflowNode(hiddenCount, popoverItems, t, helpers));
 
-  return nodes;
+  return h(Fragment, null, ...nodes);
 };
 
 const renderCodexItems = (
@@ -1568,7 +1689,7 @@ export const CLAUDE_CONFIG: QuotaConfig<
   renderQuotaItems: renderClaudeItems,
 };
 
-export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQuotaGroup[]> = {
+export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQuotaData> = {
   type: 'antigravity',
   i18nPrefix: 'antigravity_quota',
   cardIdleMessageKey: 'quota_management.card_idle_hint',
@@ -1577,11 +1698,16 @@ export const ANTIGRAVITY_CONFIG: QuotaConfig<AntigravityQuotaState, AntigravityQ
   fetchQuota: fetchAntigravityQuota,
   storeSelector: (state) => state.antigravityQuota,
   storeSetter: 'setAntigravityQuota',
-  buildLoadingState: () => ({ status: 'loading', groups: [] }),
-  buildSuccessState: (groups) => ({ status: 'success', groups }),
+  buildLoadingState: () => ({ status: 'loading', groups: [], serverTimeOffsetMs: null }),
+  buildSuccessState: (data) => ({
+    status: 'success',
+    groups: data.groups,
+    serverTimeOffsetMs: data.serverTimeOffsetMs,
+  }),
   buildErrorState: (message, status) => ({
     status: 'error',
     groups: [],
+    serverTimeOffsetMs: null,
     error: message,
     errorStatus: status,
   }),

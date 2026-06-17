@@ -3,9 +3,9 @@
  */
 
 import type {
+  AntigravityQuotaBucket,
   AntigravityQuotaGroup,
-  AntigravityQuotaInfo,
-  AntigravityModelsPayload,
+  AntigravityQuotaSummaryPayload,
   GeminiCliParsedBucket,
   GeminiCliQuotaBucketState,
   KimiUsagePayload,
@@ -14,7 +14,9 @@ import type {
   KimiLimitWindow,
   KimiQuotaRow,
 } from '@/types';
-import { normalizeQuotaFraction } from './parsers';
+import { GEMINI_CLI_GROUP_LOOKUP, GEMINI_CLI_GROUP_ORDER } from './constants';
+import { normalizeQuotaFraction, normalizeStringValue } from './parsers';
+import { isIgnoredGeminiCliModel } from './validators';
 
 export function pickEarlierResetTime(current?: string, next?: string): string | undefined {
   if (!current) return next;
@@ -37,86 +39,175 @@ export function buildGeminiCliQuotaBuckets(
 ): GeminiCliQuotaBucketState[] {
   if (buckets.length === 0) return [];
 
-  const occurrenceByKey = new Map<string, number>();
-
-  return buckets.map((bucket) => {
-    const tokenKey = bucket.tokenType ?? 'quota';
-    const baseKey = `${bucket.modelId}::${tokenKey}`;
-    const occurrence = occurrenceByKey.get(baseKey) ?? 0;
-    occurrenceByKey.set(baseKey, occurrence + 1);
-    const suffix = occurrence > 0 ? `-${occurrence + 1}` : '';
-
-    return {
-      id: `${bucket.modelId}-${tokenKey}${suffix}`,
-      label: bucket.modelId,
-      remainingFraction: bucket.remainingFraction,
-      remainingAmount: bucket.remainingAmount,
-      resetTime: bucket.resetTime,
-      tokenType: bucket.tokenType,
-      modelIds: [bucket.modelId],
-    };
-  });
-}
-
-export function getAntigravityQuotaInfo(entry?: AntigravityQuotaInfo): {
-  remainingFraction: number | null;
-  resetTime?: string;
-  displayName?: string;
-} {
-  if (!entry) {
-    return { remainingFraction: null };
-  }
-  const quotaInfo = entry.quotaInfo ?? entry.quota_info ?? {};
-  const remainingValue =
-    quotaInfo.remainingFraction ?? quotaInfo.remaining_fraction ?? quotaInfo.remaining;
-  const remainingFraction = normalizeQuotaFraction(remainingValue);
-  const resetValue = quotaInfo.resetTime ?? quotaInfo.reset_time;
-  const resetTime = typeof resetValue === 'string' ? resetValue : undefined;
-  const displayName = typeof entry.displayName === 'string' ? entry.displayName : undefined;
-
-  return {
-    remainingFraction,
-    resetTime,
-    displayName,
+  type GeminiCliQuotaBucketGroup = {
+    id: string;
+    label: string;
+    tokenType: string | null;
+    modelIds: string[];
+    preferredModelId?: string;
+    preferredBucket?: GeminiCliParsedBucket;
+    fallbackRemainingFraction: number | null;
+    fallbackRemainingAmount: number | null;
+    fallbackResetTime: string | undefined;
   };
+
+  const grouped = new Map<string, GeminiCliQuotaBucketGroup>();
+
+  buckets.forEach((bucket) => {
+    if (isIgnoredGeminiCliModel(bucket.modelId)) return;
+    const group = GEMINI_CLI_GROUP_LOOKUP.get(bucket.modelId);
+    const groupId = group?.id ?? bucket.modelId;
+    const label = group?.label ?? bucket.modelId;
+    const tokenKey = bucket.tokenType ?? '';
+    const mapKey = `${groupId}::${tokenKey}`;
+    const existing = grouped.get(mapKey);
+
+    if (!existing) {
+      const preferredModelId = group?.preferredModelId;
+      const preferredBucket =
+        preferredModelId && bucket.modelId === preferredModelId ? bucket : undefined;
+      grouped.set(mapKey, {
+        id: `${groupId}${tokenKey ? `-${tokenKey}` : ''}`,
+        label,
+        tokenType: bucket.tokenType,
+        modelIds: [bucket.modelId],
+        preferredModelId,
+        preferredBucket,
+        fallbackRemainingFraction: bucket.remainingFraction,
+        fallbackRemainingAmount: bucket.remainingAmount,
+        fallbackResetTime: bucket.resetTime,
+      });
+      return;
+    }
+
+    existing.fallbackRemainingFraction = minNullableNumber(
+      existing.fallbackRemainingFraction,
+      bucket.remainingFraction
+    );
+    existing.fallbackRemainingAmount = minNullableNumber(
+      existing.fallbackRemainingAmount,
+      bucket.remainingAmount
+    );
+    existing.fallbackResetTime = pickEarlierResetTime(existing.fallbackResetTime, bucket.resetTime);
+    existing.modelIds.push(bucket.modelId);
+
+    if (existing.preferredModelId && bucket.modelId === existing.preferredModelId) {
+      existing.preferredBucket = bucket;
+    }
+  });
+
+  const toGroupOrder = (bucket: GeminiCliQuotaBucketGroup): number => {
+    const tokenSuffix = bucket.tokenType ? `-${bucket.tokenType}` : '';
+    const groupId = bucket.id.endsWith(tokenSuffix)
+      ? bucket.id.slice(0, bucket.id.length - tokenSuffix.length)
+      : bucket.id;
+    return GEMINI_CLI_GROUP_ORDER.get(groupId) ?? Number.MAX_SAFE_INTEGER;
+  };
+
+  return Array.from(grouped.values())
+    .sort((a, b) => {
+      const orderDiff = toGroupOrder(a) - toGroupOrder(b);
+      if (orderDiff !== 0) return orderDiff;
+      const tokenTypeA = a.tokenType ?? '';
+      const tokenTypeB = b.tokenType ?? '';
+      return tokenTypeA.localeCompare(tokenTypeB);
+    })
+    .map((bucket) => {
+      const uniqueModelIds = Array.from(new Set(bucket.modelIds));
+      const preferred = bucket.preferredBucket;
+      const remainingFraction = preferred
+        ? preferred.remainingFraction
+        : bucket.fallbackRemainingFraction;
+      const remainingAmount = preferred
+        ? preferred.remainingAmount
+        : bucket.fallbackRemainingAmount;
+      const resetTime = preferred ? preferred.resetTime : bucket.fallbackResetTime;
+      return {
+        id: bucket.id,
+        label: bucket.label,
+        remainingFraction,
+        remainingAmount,
+        resetTime,
+        tokenType: bucket.tokenType,
+        modelIds: uniqueModelIds,
+      };
+    });
 }
 
-export function findAntigravityModel(
-  models: AntigravityModelsPayload,
-  identifier: string
-): { id: string; entry: AntigravityQuotaInfo } | null {
-  const direct = models[identifier];
-  if (direct) {
-    return { id: identifier, entry: direct };
-  }
+const ANTIGRAVITY_BUCKET_WINDOW_ORDER = new Map<string, number>([
+  ['weekly', 0],
+  ['week', 0],
+  ['5h', 1],
+  ['five-hour', 1],
+  ['five_hour', 1],
+]);
 
-  const match = Object.entries(models).find(([, entry]) => {
-    const name = typeof entry?.displayName === 'string' ? entry.displayName : '';
-    return name.toLowerCase() === identifier.toLowerCase();
-  });
-  if (match) {
-    return { id: match[0], entry: match[1] };
-  }
+function toStableId(value: string, fallback: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || fallback;
+}
 
-  return null;
+function getAntigravityWindowOrder(bucket: AntigravityQuotaBucket): number {
+  const window = bucket.window?.toLowerCase();
+  if (!window) return Number.MAX_SAFE_INTEGER;
+  return ANTIGRAVITY_BUCKET_WINDOW_ORDER.get(window) ?? Number.MAX_SAFE_INTEGER;
 }
 
 export function buildAntigravityQuotaGroups(
-  models: AntigravityModelsPayload
+  payload: AntigravityQuotaSummaryPayload
 ): AntigravityQuotaGroup[] {
-  return Object.entries(models)
-    .map(([id, entry]): AntigravityQuotaGroup | null => {
-      const info = getAntigravityQuotaInfo(entry);
-      if (info.remainingFraction === null && !info.resetTime) return null;
+  const groups = Array.isArray(payload.groups) ? payload.groups : [];
+
+  return groups
+    .map((group, groupIndex): AntigravityQuotaGroup | null => {
+      const label =
+        normalizeStringValue(group.displayName ?? group.display_name) ??
+        `Quota Group ${groupIndex + 1}`;
+      const groupId = toStableId(label, `quota-group-${groupIndex + 1}`);
+      const buckets = Array.isArray(group.buckets) ? group.buckets : [];
+      const parsedBuckets = buckets
+        .map((bucket, bucketIndex): AntigravityQuotaBucket | null => {
+          const remainingFraction = normalizeQuotaFraction(
+            bucket.remainingFraction ?? bucket.remaining_fraction
+          );
+          if (remainingFraction === null) return null;
+
+          const window = normalizeStringValue(bucket.window) ?? undefined;
+          const rawId =
+            normalizeStringValue(bucket.bucketId ?? bucket.bucket_id) ??
+            `${groupId}-${window ?? `bucket-${bucketIndex + 1}`}`;
+          const label = normalizeStringValue(bucket.displayName ?? bucket.display_name) ?? rawId;
+
+          return {
+            id: rawId,
+            label,
+            window,
+            remainingFraction,
+            resetTime: normalizeStringValue(bucket.resetTime ?? bucket.reset_time) ?? undefined,
+            description: normalizeStringValue(bucket.description) ?? undefined,
+          };
+        })
+        .filter((bucket): bucket is AntigravityQuotaBucket => bucket !== null)
+        .sort((a, b) => {
+          const orderDiff = getAntigravityWindowOrder(a) - getAntigravityWindowOrder(b);
+          if (orderDiff !== 0) return orderDiff;
+          return a.label.localeCompare(b.label);
+        });
+
+      if (parsedBuckets.length === 0) return null;
+
       return {
-        id,
-        label: info.displayName ?? id,
-        models: [id],
-        remainingFraction: info.remainingFraction,
-        resetTime: info.resetTime,
+        id: groupId,
+        label,
+        description: normalizeStringValue(group.description) ?? undefined,
+        buckets: parsedBuckets,
       };
     })
-    .filter((entry): entry is AntigravityQuotaGroup => entry !== null);
+    .filter((group): group is AntigravityQuotaGroup => group !== null);
 }
 
 function toInt(value: unknown): number | null {
@@ -259,8 +350,12 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
   const limits = payload.limits;
   if (Array.isArray(limits)) {
     limits.forEach((item, idx) => {
-      const detail = (item.detail && typeof item.detail === 'object' ? item.detail : item) as KimiUsageDetail | KimiLimitItem;
-      const window = (item.window && typeof item.window === 'object' ? item.window : {}) as KimiLimitWindow;
+      const detail = (item.detail && typeof item.detail === 'object' ? item.detail : item) as
+        | KimiUsageDetail
+        | KimiLimitItem;
+      const window = (
+        item.window && typeof item.window === 'object' ? item.window : {}
+      ) as KimiLimitWindow;
       const fallbackLabel = kimiLimitLabel(item, detail, window, idx);
       const row = toKimiUsageRow(detail as Record<string, unknown>, fallbackLabel);
       if (row) {

@@ -11,6 +11,7 @@ export type LogBackendKind = 'unknown' | 'file' | 'home-db';
 
 export interface LogsQuery {
   after?: LogCursor;
+  cursor?: string;
   limit?: number;
   offset?: number;
 }
@@ -42,7 +43,9 @@ export interface HomeLogsResponse {
 export interface LogsResponse {
   lines: string[];
   lineCount: number;
-  latestCursor?: LogCursor;
+  latestAfter?: LogCursor;
+  nextCursor?: string;
+  cursorReset?: boolean;
   logBackendKind: LogBackendKind;
   requestLogHomeIpById?: Record<string, string>;
   total?: number;
@@ -66,6 +69,9 @@ const numberValue = (value: unknown): number | undefined => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
+
+const booleanValue = (value: unknown): boolean =>
+  value === true || (typeof value === 'string' && value.trim().toLowerCase() === 'true');
 
 const positiveNumberValue = (value: unknown): number | undefined => {
   const parsed = numberValue(value);
@@ -104,8 +110,10 @@ const normalizeCPALogs = (data: Record<string, unknown>): LogsResponse => {
   return {
     lines,
     lineCount: Number.isFinite(lineCount) ? lineCount : lines.length,
-    latestCursor: latestTimestamp > 0 ? latestTimestamp : undefined,
-    logBackendKind: 'file'
+    latestAfter: latestTimestamp > 0 ? latestTimestamp : undefined,
+    nextCursor: stringValue(data['next-cursor']) || undefined,
+    cursorReset: booleanValue(data['cursor-reset']),
+    logBackendKind: 'file',
   };
 };
 
@@ -140,12 +148,12 @@ const normalizeHomeLogs = (data: Record<string, unknown>): LogsResponse => {
   return {
     lines,
     lineCount: Number.isFinite(total) ? total : lines.length,
-    latestCursor,
+    latestAfter: latestCursor,
     logBackendKind: 'home-db',
     requestLogHomeIpById,
     total: Number.isFinite(total) ? total : undefined,
     limit: Number.isFinite(limit) ? limit : undefined,
-    offset: Number.isFinite(offset) ? offset : undefined
+    offset: Number.isFinite(offset) ? offset : undefined,
   };
 };
 
@@ -173,39 +181,36 @@ const fetchCompleteHomeLogs = async (
     return firstPage;
   }
 
-  let nextOffset = firstOffset + records.length;
   const targetCount = Math.min(requestedLimit, Math.max(total - firstOffset, 0));
 
-  while (records.length < targetCount && nextOffset < total) {
-    const remaining = targetCount - records.length;
-    const data = await apiClient.get('/logs', {
-      params: {
-        ...params,
-        limit: Math.min(pageLimit, remaining),
-        offset: nextOffset,
-      },
-      timeout: LOGS_TIMEOUT_MS,
-    });
-
-    if (!isRecord(data) || !Array.isArray(data.logs)) {
-      break;
-    }
-
-    const pageRecords = homeRecordsFromPayload(data);
-    if (pageRecords.length === 0) {
-      break;
-    }
-
-    records.push(...pageRecords);
-    nextOffset += pageRecords.length;
+  if (records.length >= targetCount) {
+    return { ...firstPage, logs: records, limit: records.length, offset: firstOffset };
   }
 
-  return {
-    ...firstPage,
-    logs: records,
-    limit: records.length,
-    offset: firstOffset,
-  };
+  const remaining = targetCount - records.length;
+  const baseOffset = firstOffset + records.length;
+  const pageRequests: Array<{ offset: number; limit: number }> = [];
+  let collected = 0;
+  while (collected < remaining && baseOffset + collected < total) {
+    const pageSize = Math.min(pageLimit, remaining - collected);
+    pageRequests.push({ offset: baseOffset + collected, limit: pageSize });
+    collected += pageSize;
+  }
+
+  const pages = await Promise.all(
+    pageRequests.map(async ({ offset, limit }) => {
+      const data = await apiClient.get('/logs', {
+        params: { ...params, limit, offset },
+        timeout: LOGS_TIMEOUT_MS,
+      });
+      if (!isRecord(data) || !Array.isArray(data.logs)) return [];
+      return homeRecordsFromPayload(data);
+    })
+  );
+
+  pages.forEach((pageRecords) => records.push(...pageRecords));
+
+  return { ...firstPage, logs: records, limit: records.length, offset: firstOffset };
 };
 
 export const logsApi = {

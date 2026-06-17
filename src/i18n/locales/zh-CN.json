@@ -150,7 +150,7 @@
     "quick_actions": "快捷操作",
     "current_config": "当前配置",
     "management_keys": "管理密钥",
-    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}} Amp:{{ampcode}}",
+    "provider_keys_detail": "G:{{gemini}} C:{{codex}} Cl:{{claude}} V:{{vertex}} O:{{openai}}",
     "oauth_credentials": "OAuth 凭证",
     "edit_settings": "编辑设置",
     "routing_strategy": "路由策略",
@@ -444,7 +444,16 @@
     "loading": "正在加载额度...",
     "load_failed": "额度获取失败：{{message}}",
     "missing_auth_index": "认证文件缺少 auth_index",
+    "missing_project_id": "Antigravity 凭证缺少 project_id。请重新登录或刷新凭证以发现项目。",
     "empty_models": "暂无额度数据",
+    "quota_available": "额度可用",
+    "remaining_percent": "剩余 {{percent}}%",
+    "refreshes_in": "{{duration}} 后刷新",
+    "refresh_available": "可刷新",
+    "duration_day_hour": "{{days}} 天 {{hours}} 小时",
+    "duration_hour_minute": "{{hours}} 小时 {{minutes}} 分钟",
+    "duration_minute": "{{minutes}} 分钟",
+    "duration_less_than_minute": "小于 1 分钟",
     "refresh_button": "刷新额度",
     "fetch_all": "获取全部"
   },
@@ -503,7 +512,7 @@
     "observed_additional_secondary_window": "{{name}} {{duration}} 限额",
     "additional_team_secondary_window": "{{name}} 月度限额",
     "plan_label": "套餐",
-    "expires_label": "到期时间",
+    "expires_label": "续期时间",
     "reset_credits_label": "主动重置次数",
     "reset_button": "重置额度",
     "reset_confirm_title": "重置 Codex 额度",
@@ -982,6 +991,11 @@
           "logging_to_file_desc": "将日志保存到文件",
           "plugins_enabled": "启用插件系统",
           "plugins_enabled_desc": "启用标准动态库插件加载；具体插件实例仍在插件管理页启停",
+          "plugin_store_sources": "第三方插件源",
+          "plugin_store_sources_desc": "追加插件商店 registry 源；内置官方源始终保留",
+          "plugin_store_sources_label": "插件源 registry URL (plugins.store-sources)",
+          "plugin_store_sources_placeholder": "https://example.com/cliproxy-plugins/registry.json",
+          "plugin_store_sources_hint": "每行一个 registry.json URL，保存时会过滤空行",
           "logs_max_size": "日志文件大小限制 (MB)",
           "error_logs_max_files": "错误日志保留文件数",
           "usage_statistics_enabled": "启用内存用量统计",
@@ -1260,6 +1274,7 @@
     "delete_restart_required": "已加载的插件需要重启后端后才能移除。",
     "toggle_success": "插件状态已更新",
     "toggle_failed": "插件状态更新失败",
+    "runtime_pending": "插件变更已保存，但运行时状态仍在更新中。请稍后刷新或检查后端日志。",
     "save_success": "插件配置已保存",
     "save_failed": "插件配置保存失败",
     "validation_failed": "请先修复插件配置表单错误",
@@ -1276,6 +1291,8 @@
     "description": "浏览插件注册表,为当前后端安装或更新插件。",
     "description_show_more": "展开描述",
     "description_show_less": "收起描述",
+    "source_name": "来源：{{source}}",
+    "cli_proxy_api_source": "CLIProxyAPI源",
     "refresh": "刷新",
     "retry": "重试",
     "load_failed": "插件商店加载失败",
@@ -1309,6 +1326,8 @@
     "update_success": "插件更新成功",
     "install_failed": "插件安装失败",
     "update_failed": "插件更新失败",
+    "status_pending": "插件文件已更新，但本地状态尚未刷新。请稍后刷新或检查后端日志。",
+    "registration_pending": "插件文件已更新，但注册仍在进行中。请稍后刷新或检查后端日志。",
     "restart_required_notice": "需要重启服务才能加载新的插件版本",
     "restart_required_banner": "以下插件需重启服务后才能应用新版本:{{plugins}}",
     "open_repository": "打开仓库",
@@ -1317,7 +1336,24 @@
     "no_plugins_desc": "插件注册表未返回任何插件。",
     "no_matches": "没有匹配的插件",
     "no_matches_desc": "当前搜索或筛选条件下没有插件。",
-    "clear_filters": "清除筛选"
+    "clear_filters": "清除筛选",
+    "security_banner_title": "第三方插件以后端完整权限运行",
+    "security_banner_text": "插件会在代理服务内部执行代码，可读取你的凭据与流量。请仅安装你信任的插件——尤其要警惕任何并非由官方组织 router-for-me 发布的插件。",
+    "badge_untrusted": "第三方",
+    "gate_title": "安装 {{name}}",
+    "gate_title_update": "更新 {{name}}",
+    "gate_warning": "如果你不阅读以下内容，可能会发生意料之外的危险后果。",
+    "gate_effect_runs_code": "该插件将在您的代理后端内运行第三方未认证代码。系统无法对其行为进行隔离或审计，其具备访问您的敏感凭据、网络请求与响应数据的潜在权限。",
+    "gate_effect_no_review": "本插件并非由官方组织 router-for-me 发布或审核。官方不对该插件的稳定性、安全性、合规性以及后续版本的任意行为变更承担任何明示或暗示的担保责任。",
+    "gate_effect_restart": "安装会修改本地插件目录，并可能需要重启服务才能生效。",
+    "gate_untrusted_alert": "该插件并非来自官方组织 router-for-me。请仅在你完全信任其作者与来源时继续。",
+    "gate_repository_label": "仓库",
+    "gate_source_label": "来源",
+    "gate_step1_action": "我要安装此插件",
+    "gate_step2_action": "我已阅读并理解上述风险",
+    "gate_step3_prompt": "如需确认，请在下方输入框中键入 “{{token}}”",
+    "gate_step3_action": "安装此插件",
+    "gate_step3_hint": "请输入上方显示的完整标识以启用安装。"
   },
   "plugin_resource": {
     "title": "插件页面",
@@ -1412,8 +1448,6 @@
     "openai_provider_added": "OpenAI提供商添加成功",
     "openai_provider_updated": "OpenAI提供商更新成功",
     "openai_provider_deleted": "OpenAI提供商删除成功",
-    "ampcode_updated": "Ampcode 配置已更新",
-    "ampcode_upstream_api_key_cleared": "Ampcode upstream API key 覆盖已清除",
     "openai_model_name_required": "请填写模型名称",
     "openai_test_url_required": "请先填写有效的 Base URL 以进行测试",
     "openai_test_key_required": "请至少填写一个 API 密钥以进行测试",
@@ -1492,17 +1526,14 @@
     },
     "categories": {
       "title": "提供商",
-      "activeCount": "{{active}}/{{total}} 活跃",
-      "ampcodeActive": "已连接",
-      "ampcodeInactive": "未配置"
+      "activeCount": "{{active}}/{{total}} 活跃"
     },
     "providerNames": {
       "gemini": "Gemini",
       "codex": "Codex",
       "claude": "Claude",
       "vertex": "Vertex",
-      "openaiCompatibility": "OpenAI 兼容",
-      "ampcode": "Amp CLI"
+      "openaiCompatibility": "OpenAI 兼容"
     },
     "table": {
       "key": "密钥",
@@ -1514,12 +1545,10 @@
       "metrics": {
         "models": "模型",
         "keys": "密钥",
-        "headers": "请求头",
-        "mappings": "映射"
+        "headers": "请求头"
       },
       "websocketsTag": "WebSockets",
       "cloakTag": "Cloak",
-      "noFallbackKey": "未设置兜底密钥",
       "empty": "尚未添加配置,点击右上角新建。",
       "filterPlaceholder": "搜索密钥、地址、前缀…",
       "description": "在 {{route}} 下管理资源",
@@ -1617,25 +1646,9 @@
         "baseUrlRequired": "服务地址必填"
       }
     },
-    "ampcode": {
-      "upstreamUrl": "上游 URL",
-      "upstreamApiKey": "上游 API 密钥(兜底)",
-      "upstreamApiKeyHint": "未匹配密钥映射时使用",
-      "keyMappingsSection": "上游密钥映射",
-      "mappingRow": "映射 #{{index}}",
-      "clientKeys": "客户端密钥",
-      "clientKeysHint": "每行一个,匹配后转发到上述上游密钥",
-      "addMapping": "添加密钥映射",
-      "modelMappingsSection": "模型映射",
-      "addModelMapping": "添加模型映射",
-      "forceModelMappings": "强制模型映射",
-      "forceModelMappingsHint": "启用后,所有请求必须命中模型映射规则"
-    },
     "delete": {
       "title": "删除资源",
-      "confirm": "确定要删除 {{name}} 吗?此操作不可撤销。",
-      "ampcodeTitle": "清空 Amp CLI 配置",
-      "ampcodeConfirm": "确定要清空 Amp CLI 配置吗?上游 URL、API 密钥与模型映射都会被移除。"
+      "confirm": "确定要删除 {{name}} 吗?此操作不可撤销。"
     },
     "toast": {
       "created": "创建成功",
