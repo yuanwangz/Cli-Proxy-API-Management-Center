@@ -25,6 +25,7 @@ export interface UsageEvent {
   latencyMs: number | null;
   failed: boolean;
   statusCode: number | null;
+  errorDetail: string;
   cost: number;
 }
 
@@ -96,6 +97,7 @@ export interface RecentUsageRow {
   latencyMs: number | null;
   statusCode: number | null;
   error: string;
+  errorDetail: string;
   failed: boolean;
 }
 
@@ -179,6 +181,35 @@ const safeText = (value: unknown, fallback = '-'): string => {
   }
   const text = String(value).trim();
   return text || fallback;
+};
+
+const detailText = (value: unknown): string => {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+  if (value && typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+};
+
+const normalizeErrorDetail = (value: unknown): string => {
+  const text = detailText(value);
+  if (!text) return '';
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return text;
+  }
+};
+
+const readErrorDetail = (detail: UsageDetail): string => {
+  const failBody = detail.fail && typeof detail.fail === 'object' ? detail.fail.body : undefined;
+  return normalizeErrorDetail(detail.error ?? detail.error_detail ?? detail.failure_body ?? failBody);
 };
 
 export const maskCredential = (value: string): string => {
@@ -294,6 +325,7 @@ export const flattenUsageEvents = (
         const statusCodeValue = toFiniteNumber(detail.status_code);
         const statusCode = statusCodeValue > 0 ? statusCodeValue : null;
         const provider = inferProvider(modelName, `${account} ${authIndex}`, endpointName);
+        const errorDetail = readErrorDetail(detail);
 
         events.push({
           id: `${endpointName}:${modelName}:${timestampMs}:${index}`,
@@ -320,6 +352,7 @@ export const flattenUsageEvents = (
           latencyMs,
           failed: detail.failed === true,
           statusCode,
+          errorDetail,
           cost: estimateCost(modelName, inputTokens, outputTokens),
         });
       });
@@ -625,6 +658,7 @@ export const buildUsageAnalytics = (
       latencyMs: event.latencyMs,
       statusCode: event.statusCode,
       error: event.failed ? '请求失败' : '—',
+      errorDetail: event.errorDetail,
       failed: event.failed,
     })),
     providerOptions: uniqueSorted(events.map((event) => event.provider)),

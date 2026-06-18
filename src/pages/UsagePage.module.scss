@@ -474,6 +474,32 @@
   }
 }
 
+.errorCell {
+  max-width: 180px;
+}
+
+.errorDetailButton {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--usage-danger);
+  font: inherit;
+  font-weight: 760;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
 .credentialPopover {
   position: absolute;
   left: 0;
@@ -508,6 +534,27 @@
     color: var(--usage-ink);
     font-size: 12px;
     font-weight: 760;
+    overflow-wrap: anywhere;
+  }
+}
+
+.errorPopover {
+  right: 0;
+  left: auto;
+  width: min(560px, 84vw);
+
+  pre {
+    max-height: 280px;
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+    color: var(--usage-ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
 }

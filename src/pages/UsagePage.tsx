@@ -75,6 +75,7 @@ const chartWidth = 760;
 const chartHeight = 132;
 const chartPadding = { top: 12, right: 12, bottom: 22, left: 38 };
 const RECENT_PAGE_SIZES = [25, 50, 100];
+const USAGE_POPOVER_OPEN_EVENT = 'usage-popover-open';
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 
@@ -419,11 +420,11 @@ function CredentialChip({
 
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('usage-credential-popover-open', handlePopoverOpen);
+    window.addEventListener(USAGE_POPOVER_OPEN_EVENT, handlePopoverOpen);
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('usage-credential-popover-open', handlePopoverOpen);
+      window.removeEventListener(USAGE_POPOVER_OPEN_EVENT, handlePopoverOpen);
     };
   }, [id, open]);
 
@@ -432,7 +433,7 @@ function CredentialChip({
     setOpen((current) => {
       const nextOpen = !current;
       if (nextOpen) {
-        window.dispatchEvent(new CustomEvent('usage-credential-popover-open', { detail: id }));
+        window.dispatchEvent(new CustomEvent(USAGE_POPOVER_OPEN_EVENT, { detail: id }));
       }
       return nextOpen;
     });
@@ -469,6 +470,91 @@ function CredentialChip({
               <strong>{apiKey}</strong>
             </span>
           )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function FailureDetailChip({
+  label,
+  detail,
+  statusCode,
+  failed,
+}: {
+  label: string;
+  detail?: string;
+  statusCode?: number | null;
+  failed: boolean;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLSpanElement>(null);
+  const detailText =
+    detail?.trim() ||
+    `HTTP ${statusCode || '未知状态'} 请求失败，未记录到上游响应内容`;
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    const handlePopoverOpen = (event: Event) => {
+      const nextID = (event as CustomEvent<string>).detail;
+      if (nextID !== id) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener(USAGE_POPOVER_OPEN_EVENT, handlePopoverOpen);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener(USAGE_POPOVER_OPEN_EVENT, handlePopoverOpen);
+    };
+  }, [id, open]);
+
+  if (!failed) {
+    return <span>{label}</span>;
+  }
+
+  const toggleOpen = () => {
+    setOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        window.dispatchEvent(new CustomEvent(USAGE_POPOVER_OPEN_EVENT, { detail: id }));
+      }
+      return nextOpen;
+    });
+  };
+
+  return (
+    <span ref={rootRef} className={`${styles.credentialCell} ${styles.errorCell}`}>
+      <button
+        type="button"
+        className={styles.errorDetailButton}
+        onClick={toggleOpen}
+        aria-expanded={open}
+        aria-label="查看失败响应详情"
+      >
+        {label}
+      </button>
+      {open && (
+        <span className={`${styles.credentialPopover} ${styles.errorPopover}`} role="dialog">
+          <span>
+            <em>失败响应内容</em>
+            <pre>{detailText}</pre>
+          </span>
         </span>
       )}
     </span>
@@ -800,7 +886,14 @@ function RecentRequestsTable({
                 <td>{formatCompactNumber(row.outputTokens)}</td>
                 <td>{formatCompactNumber(row.totalTokens)}</td>
                 <td>{formatLatency(row.latencyMs)}</td>
-                <td>{row.error}</td>
+                <td>
+                  <FailureDetailChip
+                    label={row.error}
+                    detail={row.errorDetail}
+                    statusCode={row.statusCode}
+                    failed={row.failed}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

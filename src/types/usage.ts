@@ -19,6 +19,13 @@ export interface UsageDetail {
   auth_index?: string | number | null;
   latency_ms?: number | null;
   status_code?: number | null;
+  error?: unknown;
+  error_detail?: unknown;
+  failure_body?: unknown;
+  fail?: {
+    body?: unknown;
+    status_code?: unknown;
+  } | null;
   tokens?: UsageTokens;
   failed?: boolean;
 }
