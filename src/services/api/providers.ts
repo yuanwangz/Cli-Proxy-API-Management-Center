@@ -10,6 +10,7 @@ import {
   normalizeProviderKeyConfig,
 } from './transformers';
 import type {
+  FailureWarmupConfig,
   GeminiKeyConfig,
   OpenAIProviderConfig,
   ProviderKeyConfig,
@@ -32,6 +33,7 @@ const PROVIDER_COMMON_KEY_FIELDS = [
   'models',
   'excluded-models',
   'disable-cooling',
+  'failure-warmup',
 ] as const;
 
 const GEMINI_KEY_FIELDS = PROVIDER_COMMON_KEY_FIELDS;
@@ -50,6 +52,7 @@ const VERTEX_KEY_FIELDS = [
   'headers',
   'models',
   'excluded-models',
+  'failure-warmup',
 ] as const;
 
 const OPENAI_PROVIDER_FIELDS = [
@@ -63,6 +66,7 @@ const OPENAI_PROVIDER_FIELDS = [
   'models',
   'test-model',
   'disable-cooling',
+  'failure-warmup',
 ] as const;
 
 const MODEL_ALIAS_FIELDS = ['name', 'alias', 'priority', 'test-model'] as const;
@@ -304,6 +308,38 @@ const serializeApiKeyEntry = (entry: ApiKeyEntry) => {
   return payload;
 };
 
+const normalizeFailureWarmupStatusCodes = (codes?: number[]) => {
+  const seen = new Set<number>();
+  const normalized: number[] = [];
+  (codes ?? []).forEach((code) => {
+    if (!Number.isInteger(code) || code < 100 || code > 599) return;
+    if (seen.has(code)) return;
+    seen.add(code);
+    normalized.push(code);
+  });
+  return normalized;
+};
+
+const serializeFailureWarmup = (config?: FailureWarmupConfig) => {
+  if (!config) return undefined;
+  if (config.enabled !== true) {
+    return { enabled: false };
+  }
+  const payload: Record<string, unknown> = { enabled: true };
+  const statusCodes = normalizeFailureWarmupStatusCodes(config.statusCodes);
+  if (statusCodes.length) {
+    payload['status-codes'] = statusCodes;
+  }
+  if (
+    typeof config.maxAttempts === 'number' &&
+    Number.isFinite(config.maxAttempts) &&
+    config.maxAttempts > 0
+  ) {
+    payload['max-attempts'] = Math.trunc(config.maxAttempts);
+  }
+  return payload;
+};
+
 const serializeProviderKey = (config: ProviderKeyConfig) => {
   const payload: Record<string, unknown> = { 'api-key': config.apiKey };
   if (config.priority !== undefined) payload.priority = config.priority;
@@ -312,6 +348,8 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
   if (config.websockets !== undefined) payload.websockets = config.websockets;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
   if (config.disableCooling) payload['disable-cooling'] = true;
+  const failureWarmup = serializeFailureWarmup(config.failureWarmup);
+  if (failureWarmup) payload['failure-warmup'] = failureWarmup;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -359,6 +397,8 @@ const serializeVertexKey = (config: ProviderKeyConfig) => {
   if (config.prefix?.trim()) payload.prefix = config.prefix.trim();
   if (config.baseUrl) payload['base-url'] = config.baseUrl;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
+  const failureWarmup = serializeFailureWarmup(config.failureWarmup);
+  if (failureWarmup) payload['failure-warmup'] = failureWarmup;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeVertexModelAliases(config.models);
@@ -376,6 +416,8 @@ const serializeGeminiKey = (config: GeminiKeyConfig) => {
   if (config.baseUrl) payload['base-url'] = config.baseUrl;
   if (config.proxyUrl) payload['proxy-url'] = config.proxyUrl;
   if (config.disableCooling) payload['disable-cooling'] = true;
+  const failureWarmup = serializeFailureWarmup(config.failureWarmup);
+  if (failureWarmup) payload['failure-warmup'] = failureWarmup;
   const headers = serializeHeaders(config.headers);
   if (headers) payload.headers = headers;
   const models = serializeModelAliases(config.models);
@@ -403,6 +445,8 @@ const serializeOpenAIProvider = (provider: OpenAIProviderConfig) => {
   if (provider.priority !== undefined) payload.priority = provider.priority;
   if (provider.testModel) payload['test-model'] = provider.testModel;
   if (provider.disableCooling) payload['disable-cooling'] = true;
+  const failureWarmup = serializeFailureWarmup(provider.failureWarmup);
+  if (failureWarmup) payload['failure-warmup'] = failureWarmup;
   return payload;
 };
 

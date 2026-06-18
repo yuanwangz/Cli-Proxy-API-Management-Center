@@ -16,6 +16,11 @@ import { hasDisableAllModelsRule } from '@/components/providers/utils';
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
 import type { ModelInfo } from '@/utils/models';
 import { PROVIDER_DESCRIPTORS } from '../../descriptors';
+import {
+  DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS,
+  DEFAULT_FAILURE_WARMUP_STATUS_CODES,
+  FAILURE_WARMUP_STATUS_CODE_OPTIONS,
+} from '../../types';
 import type {
   ApiKeyEntryInput,
   ModelEntryInput,
@@ -61,6 +66,23 @@ const formatJsonObject = (value?: Record<string, unknown>): string => {
   return JSON.stringify(value, null, 2);
 };
 
+const normalizeWarmupStatusCodes = (codes?: number[]): number[] => {
+  const seen = new Set<number>();
+  const normalized: number[] = [];
+  (codes?.length ? codes : DEFAULT_FAILURE_WARMUP_STATUS_CODES).forEach((code) => {
+    if (!Number.isInteger(code) || code < 100 || code > 599) return;
+    if (seen.has(code)) return;
+    seen.add(code);
+    normalized.push(code);
+  });
+  return normalized.length ? normalized : [...DEFAULT_FAILURE_WARMUP_STATUS_CODES];
+};
+
+const normalizeWarmupMaxAttempts = (value?: number): number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.trunc(value)
+    : DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS;
+
 function buildInitialForm(
   brand: ProviderBrand,
   resource: ProviderResource | null,
@@ -75,6 +97,9 @@ function buildInitialForm(
       prefix: '',
       disabled: false,
       disableCooling: false,
+      failureWarmupEnabled: false,
+      failureWarmupStatusCodes: [...DEFAULT_FAILURE_WARMUP_STATUS_CODES],
+      failureWarmupMaxAttempts: DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS,
       priority: undefined,
       models: [emptyModel()],
       headers: [emptyHeader()],
@@ -107,6 +132,9 @@ function buildInitialForm(
       prefix: cfg.prefix ?? '',
       disabled: cfg.disabled === true,
       disableCooling: cfg.disableCooling === true,
+      failureWarmupEnabled: cfg.failureWarmup?.enabled === true,
+      failureWarmupStatusCodes: normalizeWarmupStatusCodes(cfg.failureWarmup?.statusCodes),
+      failureWarmupMaxAttempts: normalizeWarmupMaxAttempts(cfg.failureWarmup?.maxAttempts),
       priority: cfg.priority,
       models: cfg.models?.length
         ? cfg.models.map((m) => ({
@@ -149,6 +177,9 @@ function buildInitialForm(
     prefix: cfg.prefix ?? '',
     disabled,
     disableCooling: cfg.disableCooling === true,
+    failureWarmupEnabled: cfg.failureWarmup?.enabled === true,
+    failureWarmupStatusCodes: normalizeWarmupStatusCodes(cfg.failureWarmup?.statusCodes),
+    failureWarmupMaxAttempts: normalizeWarmupMaxAttempts(cfg.failureWarmup?.maxAttempts),
     priority: cfg.priority,
     models: cfg.models?.length
       ? cfg.models.map((m) => ({
@@ -173,9 +204,7 @@ function buildInitialForm(
           }
         : undefined,
     experimentalCchSigning:
-      brand === 'claude'
-        ? (cfg as ProviderKeyConfig).experimentalCchSigning === true
-        : undefined,
+      brand === 'claude' ? (cfg as ProviderKeyConfig).experimentalCchSigning === true : undefined,
     testModel: brand === 'codex' || brand === 'claude' || brand === 'gemini' ? '' : undefined,
   };
 }
@@ -449,15 +478,30 @@ export function BaseProviderForm({
     brand === 'codex' ||
     brand === 'claude' ||
     brand === 'openaiCompatibility';
+  const supportsFailureWarmup =
+    brand === 'gemini' ||
+    brand === 'codex' ||
+    brand === 'claude' ||
+    brand === 'vertex' ||
+    brand === 'openaiCompatibility';
+  const warmupStatusCodeOptions = useMemo(() => {
+    const set = new Set<number>(FAILURE_WARMUP_STATUS_CODE_OPTIONS);
+    normalizeWarmupStatusCodes(form.failureWarmupStatusCodes).forEach((code) => set.add(code));
+    return Array.from(set).sort((a, b) => a - b);
+  }, [form.failureWarmupStatusCodes]);
+  const selectedWarmupStatusCodes = useMemo(
+    () => new Set(normalizeWarmupStatusCodes(form.failureWarmupStatusCodes)),
+    [form.failureWarmupStatusCodes]
+  );
   const supportsOpenAIModelOptions = brand === 'openaiCompatibility';
   const singleConnectivity =
     brand === 'codex'
       ? { status: connectivity.codexStatus, run: connectivity.runCodex }
       : brand === 'gemini'
-      ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
-      : brand === 'claude'
-        ? { status: connectivity.claudeStatus, run: connectivity.runClaude }
-        : null;
+        ? { status: connectivity.geminiStatus, run: connectivity.runGemini }
+        : brand === 'claude'
+          ? { status: connectivity.claudeStatus, run: connectivity.runClaude }
+          : null;
 
   const removeApiKeyEntry = (removeIdx: number) => {
     setShowPasswords((prev) => {
@@ -482,6 +526,20 @@ export function BaseProviderForm({
     updateField(
       'models',
       modelsList.map((it, i) => (i === idx ? { ...it, ...patch } : it))
+    );
+  };
+
+  const updateWarmupStatusCode = (code: number, checked: boolean) => {
+    const current = normalizeWarmupStatusCodes(form.failureWarmupStatusCodes);
+    const next = new Set(current);
+    if (checked) {
+      next.add(code);
+    } else if (next.size > 1) {
+      next.delete(code);
+    }
+    updateField(
+      'failureWarmupStatusCodes',
+      warmupStatusCodeOptions.filter((item) => next.has(item))
     );
   };
 
@@ -724,6 +782,77 @@ export function BaseProviderForm({
               <small>{t('providersPage.form.disableCoolingHint')}</small>
             </span>
           </label>
+        ) : null}
+
+        {supportsFailureWarmup ? (
+          <div className={styles.warmupBlock}>
+            <label className={styles.checkboxRow}>
+              <input
+                type="checkbox"
+                className={styles.checkboxBox}
+                checked={form.failureWarmupEnabled ?? false}
+                disabled={mutating}
+                onChange={(e) => updateField('failureWarmupEnabled', e.target.checked)}
+              />
+              <span className={styles.checkboxText}>
+                <span>{t('providersPage.form.failureWarmup')}</span>
+                <small>{t('providersPage.form.failureWarmupHint')}</small>
+              </span>
+            </label>
+
+            {form.failureWarmupEnabled ? (
+              <div className={styles.warmupPanel}>
+                <div className={styles.field}>
+                  <div className={styles.label}>
+                    {t('providersPage.form.failureWarmupStatusCodes')}
+                  </div>
+                  <div className={styles.statusCodeGrid}>
+                    {warmupStatusCodeOptions.map((code) => (
+                      <label key={code} className={styles.statusCodeOption}>
+                        <input
+                          type="checkbox"
+                          className={styles.statusCodeCheckbox}
+                          checked={selectedWarmupStatusCodes.has(code)}
+                          disabled={mutating}
+                          onChange={(e) => updateWarmupStatusCode(code, e.target.checked)}
+                        />
+                        <span>{code}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.label} htmlFor={`${fid}-failure-warmup-attempts`}>
+                    {t('providersPage.form.failureWarmupMaxAttempts')}
+                  </label>
+                  <input
+                    id={`${fid}-failure-warmup-attempts`}
+                    type="number"
+                    min={1}
+                    max={50}
+                    className={styles.input}
+                    value={form.failureWarmupMaxAttempts ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '') {
+                        updateField('failureWarmupMaxAttempts', undefined);
+                        return;
+                      }
+                      const parsed = Number(value);
+                      updateField(
+                        'failureWarmupMaxAttempts',
+                        Number.isFinite(parsed)
+                          ? Math.min(50, Math.max(1, Math.trunc(parsed)))
+                          : undefined
+                      );
+                    }}
+                    disabled={mutating}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </div>
 

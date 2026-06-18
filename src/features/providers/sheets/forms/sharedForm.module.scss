@@ -140,6 +140,55 @@
   }
 }
 
+.warmupBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.warmupPanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 12px;
+  padding-left: 26px;
+}
+
+.statusCodeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.statusCodeOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  user-select: none;
+}
+
+.statusCodeCheckbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--primary-color);
+}
+
+@media (max-width: $breakpoint-mobile) {
+  .warmupPanel {
+    grid-template-columns: 1fr;
+    padding-left: 0;
+  }
+}
+
 .fieldRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -245,7 +294,9 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color $transition-fast, border-color $transition-fast;
+  transition:
+    background-color $transition-fast,
+    border-color $transition-fast;
 
   &:hover:not(:disabled) {
     border-color: var(--primary-color);
@@ -271,7 +322,9 @@
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color $transition-fast, color $transition-fast;
+  transition:
+    background-color $transition-fast,
+    color $transition-fast;
 
   &:hover:not(:disabled) {
     background: var(--bg-tertiary);

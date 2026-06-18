@@ -1,10 +1,11 @@
 import type {
   ApiKeyEntry,
   CloakConfig,
+  FailureWarmupConfig,
   GeminiKeyConfig,
   ModelAlias,
   OpenAIProviderConfig,
-  ProviderKeyConfig
+  ProviderKeyConfig,
 } from '@/types';
 import type { Config } from '@/types/config';
 import { buildHeaderObject } from '@/utils/headers';
@@ -69,7 +70,11 @@ const normalizeHeaders = (headers: unknown) => {
 };
 
 const normalizeExcludedModels = (input: unknown): string[] => {
-  const rawList = Array.isArray(input) ? input : typeof input === 'string' ? input.split(/[\n,]/) : [];
+  const rawList = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(/[\n,]/)
+      : [];
   const seen = new Set<string>();
   const normalized: string[] = [];
 
@@ -83,6 +88,48 @@ const normalizeExcludedModels = (input: unknown): string[] => {
   });
 
   return normalized;
+};
+
+const normalizeStatusCodes = (input: unknown): number[] => {
+  const rawList = Array.isArray(input)
+    ? input
+    : typeof input === 'string'
+      ? input.split(/[,\s;]+/)
+      : [];
+  const seen = new Set<number>();
+  const normalized: number[] = [];
+
+  rawList.forEach((item) => {
+    const code = Number(item);
+    if (!Number.isInteger(code) || code < 100 || code > 599) return;
+    if (seen.has(code)) return;
+    seen.add(code);
+    normalized.push(code);
+  });
+
+  return normalized;
+};
+
+const normalizePositiveInteger = (value: unknown): number | undefined => {
+  if (value === undefined || value === null || String(value).trim() === '') return undefined;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return Math.trunc(parsed);
+};
+
+const normalizeFailureWarmup = (input: unknown): FailureWarmupConfig | undefined => {
+  if (!isRecord(input)) return undefined;
+
+  const enabled = normalizeBoolean(input.enabled);
+  const statusCodes = normalizeStatusCodes(input['status-codes']);
+  const maxAttempts = normalizePositiveInteger(input['max-attempts']);
+  if (enabled === undefined && !statusCodes.length && maxAttempts === undefined) return undefined;
+
+  const result: FailureWarmupConfig = {};
+  if (enabled !== undefined) result.enabled = enabled;
+  if (statusCodes.length) result.statusCodes = statusCodes;
+  if (maxAttempts !== undefined) result.maxAttempts = maxAttempts;
+  return result;
 };
 
 const normalizePrefix = (value: unknown): string | undefined => {
@@ -109,7 +156,7 @@ const normalizeApiKeyEntry = (entry: unknown): ApiKeyEntry | null => {
 
   const result: ApiKeyEntry = {
     apiKey: trimmed,
-    proxyUrl: proxyUrl ? String(proxyUrl) : undefined
+    proxyUrl: proxyUrl ? String(proxyUrl) : undefined,
   };
   if (authIndex) result.authIndex = authIndex;
   return result;
@@ -140,6 +187,8 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   const disableCooling = normalizeBoolean(record?.['disable-cooling']);
   if (disableCooling !== undefined) config.disableCooling = disableCooling;
+  const failureWarmup = normalizeFailureWarmup(record?.['failure-warmup']);
+  if (failureWarmup) config.failureWarmup = failureWarmup;
   const headers = normalizeHeaders(record?.headers);
   if (headers) config.headers = headers;
   const models = normalizeModelAliases(record?.models);
@@ -206,6 +255,8 @@ const normalizeGeminiKeyConfig = (item: unknown): GeminiKeyConfig | null => {
   if (proxyUrl) config.proxyUrl = String(proxyUrl);
   const disableCooling = normalizeBoolean(record?.['disable-cooling']);
   if (disableCooling !== undefined) config.disableCooling = disableCooling;
+  const failureWarmup = normalizeFailureWarmup(record?.['failure-warmup']);
+  if (failureWarmup) config.failureWarmup = failureWarmup;
   const models = normalizeModelAliases(record?.models);
   if (models.length) config.models = models;
   const headers = normalizeHeaders(record?.headers);
@@ -237,13 +288,15 @@ const normalizeOpenAIProvider = (provider: unknown): OpenAIProviderConfig | null
   const result: OpenAIProviderConfig = {
     name: String(name),
     baseUrl: String(baseUrl),
-    apiKeyEntries
+    apiKeyEntries,
   };
 
   const disabled = normalizeBoolean(provider.disabled);
   if (disabled !== undefined) result.disabled = disabled;
   const disableCooling = normalizeBoolean(provider['disable-cooling']);
   if (disableCooling !== undefined) result.disableCooling = disableCooling;
+  const failureWarmup = normalizeFailureWarmup(provider['failure-warmup']);
+  if (failureWarmup) result.failureWarmup = failureWarmup;
   const prefix = normalizePrefix(provider.prefix);
   if (prefix) result.prefix = prefix;
   if (headers) result.headers = headers;
@@ -281,7 +334,11 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
   config.debug = normalizeBoolean(raw.debug);
   const proxyUrl = raw['proxy-url'];
   config.proxyUrl =
-    typeof proxyUrl === 'string' ? proxyUrl : proxyUrl === undefined || proxyUrl === null ? undefined : String(proxyUrl);
+    typeof proxyUrl === 'string'
+      ? proxyUrl
+      : proxyUrl === undefined || proxyUrl === null
+        ? undefined
+        : String(proxyUrl);
   const requestRetry = raw['request-retry'];
   if (typeof requestRetry === 'number' && Number.isFinite(requestRetry)) {
     config.requestRetry = requestRetry;
@@ -297,7 +354,7 @@ export const normalizeConfigResponse = (raw: unknown): Config => {
     config.quotaExceeded = {
       switchProject: normalizeBoolean(quota['switch-project']),
       switchPreviewModel: normalizeBoolean(quota['switch-preview-model']),
-      antigravityCredits: normalizeBoolean(quota['antigravity-credits'])
+      antigravityCredits: normalizeBoolean(quota['antigravity-credits']),
     };
   }
 
@@ -374,5 +431,5 @@ export {
   normalizeOpenAIProvider,
   normalizeProviderKeyConfig,
   normalizeHeaders,
-  normalizeExcludedModels
+  normalizeExcludedModels,
 };

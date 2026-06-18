@@ -25,6 +25,12 @@ export interface CloakConfig {
   cacheUserId?: boolean;
 }
 
+export interface FailureWarmupConfig {
+  enabled?: boolean;
+  statusCodes?: number[];
+  maxAttempts?: number;
+}
+
 export interface GeminiKeyConfig {
   apiKey: string;
   priority?: number;
@@ -35,6 +41,7 @@ export interface GeminiKeyConfig {
   headers?: Record<string, string>;
   excludedModels?: string[];
   disableCooling?: boolean;
+  failureWarmup?: FailureWarmupConfig;
   authIndex?: string;
 }
 
@@ -49,6 +56,7 @@ export interface ProviderKeyConfig {
   models?: ModelAlias[];
   excludedModels?: string[];
   disableCooling?: boolean;
+  failureWarmup?: FailureWarmupConfig;
   cloak?: CloakConfig;
   experimentalCchSigning?: boolean;
   authIndex?: string;
@@ -65,6 +73,7 @@ export interface OpenAIProviderConfig {
   priority?: number;
   testModel?: string;
   disableCooling?: boolean;
+  failureWarmup?: FailureWarmupConfig;
   authIndex?: string;
   [key: string]: unknown;
 }

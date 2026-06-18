@@ -6,7 +6,12 @@ import {
   withDisableAllModelsRule,
   withoutDisableAllModelsRule,
 } from '@/components/providers/utils';
-import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type {
+  FailureWarmupConfig,
+  GeminiKeyConfig,
+  OpenAIProviderConfig,
+  ProviderKeyConfig,
+} from '@/types';
 import {
   claudeToResource,
   codexToResource,
@@ -21,6 +26,10 @@ import type {
   ProviderGroup,
   ProviderResource,
   ProviderSnapshot,
+} from './types';
+import {
+  DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS as DEFAULT_WARMUP_ATTEMPTS,
+  DEFAULT_FAILURE_WARMUP_STATUS_CODES as DEFAULT_WARMUP_STATUS_CODES,
 } from './types';
 
 export interface UseProviderWorkbenchResult {
@@ -89,6 +98,34 @@ const buildExcludedModels = (
   return filtered.length ? filtered : undefined;
 };
 
+const normalizeWarmupStatusCodes = (codes?: number[]): number[] => {
+  const seen = new Set<number>();
+  const normalized: number[] = [];
+  (codes ?? DEFAULT_WARMUP_STATUS_CODES).forEach((code) => {
+    if (!Number.isInteger(code) || code < 100 || code > 599) return;
+    if (seen.has(code)) return;
+    seen.add(code);
+    normalized.push(code);
+  });
+  return normalized.length ? normalized : [...DEFAULT_WARMUP_STATUS_CODES];
+};
+
+const buildFailureWarmupConfig = (input: ProviderEntryFormInput): FailureWarmupConfig => {
+  if (input.failureWarmupEnabled !== true) {
+    return { enabled: false };
+  }
+  const rawAttempts = input.failureWarmupMaxAttempts;
+  const maxAttempts =
+    typeof rawAttempts === 'number' && Number.isFinite(rawAttempts) && rawAttempts > 0
+      ? Math.trunc(rawAttempts)
+      : DEFAULT_WARMUP_ATTEMPTS;
+  return {
+    enabled: true,
+    statusCodes: normalizeWarmupStatusCodes(input.failureWarmupStatusCodes),
+    maxAttempts,
+  };
+};
+
 const buildProviderKeyConfig = (
   brand: 'gemini' | 'codex' | 'claude' | 'vertex',
   input: ProviderEntryFormInput,
@@ -115,6 +152,7 @@ const buildProviderKeyConfig = (
     headers: Object.keys(headers).length ? headers : undefined,
     excludedModels: excluded,
     disableCooling: input.disableCooling === true,
+    failureWarmup: buildFailureWarmupConfig(input),
     authIndex: existing?.authIndex,
   };
   if (brand === 'codex' && input.websockets !== undefined) {
@@ -170,6 +208,7 @@ const buildOpenAIConfig = (
     apiKeyEntries,
     disabled: input.disabled,
     disableCooling: input.disableCooling === true,
+    failureWarmup: buildFailureWarmupConfig(input),
     headers: Object.keys(headers).length ? headers : undefined,
     models: models.length ? models : undefined,
     priority: input.priority,

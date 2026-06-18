@@ -2,18 +2,19 @@
  * AI 提供商 Workbench 视图模型(归一化各 brand 的异构 config)
  */
 
-export type ProviderBrand =
-  | 'gemini'
-  | 'codex'
-  | 'claude'
-  | 'vertex'
-  | 'openaiCompatibility';
+export type ProviderBrand = 'gemini' | 'codex' | 'claude' | 'vertex' | 'openaiCompatibility';
 
 export const PROVIDER_SORT_BY_VALUES = ['name', 'priority', 'recent-success'] as const;
 export type ProviderSortBy = (typeof PROVIDER_SORT_BY_VALUES)[number];
 
 export const SORT_DIR_VALUES = ['asc', 'desc'] as const;
 export type SortDir = (typeof SORT_DIR_VALUES)[number];
+
+export const DEFAULT_FAILURE_WARMUP_STATUS_CODES = [429, 500, 502, 503, 504, 529] as const;
+export const FAILURE_WARMUP_STATUS_CODE_OPTIONS = [
+  403, 408, 409, 423, 429, 500, 502, 503, 504, 529,
+] as const;
+export const DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS = 5;
 
 export type ProviderResourceSelector =
   | { brand: 'gemini'; apiKey: string; baseUrl?: string; index: number }
@@ -112,6 +113,9 @@ export interface ProviderEntryFormInput {
   prefix: string;
   disabled: boolean;
   disableCooling?: boolean;
+  failureWarmupEnabled?: boolean;
+  failureWarmupStatusCodes?: number[];
+  failureWarmupMaxAttempts?: number;
   priority?: number;
 
   /** 高级折叠区 */
