@@ -103,6 +103,7 @@ export function AuthFilesPage() {
   const [archiveFilter, setArchiveFilter] = useState<AuthFilesArchiveFilter>('active');
   const [problemOnly, setProblemOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
+  const [enabledOnly, setEnabledOnly] = useState(false);
   const [statusCodeFilter, setStatusCodeFilter] = useState<AuthFilesStatusCodeFilter>('all');
   const [compactMode, setCompactMode] = useState(false);
   const [search, setSearch] = useState('');
@@ -232,6 +233,9 @@ export function AuthFilesPage() {
       if (typeof persisted.disabledOnly === 'boolean') {
         setDisabledOnly(persisted.disabledOnly);
       }
+      if (typeof persisted.enabledOnly === 'boolean') {
+        setEnabledOnly(persisted.enabledOnly);
+      }
       if (isAuthFilesStatusCodeFilter(persisted.statusCodeFilter)) {
         setStatusCodeFilter(persisted.statusCodeFilter);
       }
@@ -274,6 +278,7 @@ export function AuthFilesPage() {
     writeAuthFilesUiState({
       filter,
       archiveFilter,
+      enabledOnly,
       problemOnly,
       disabledOnly,
       statusCodeFilter,
@@ -298,6 +303,7 @@ export function AuthFilesPage() {
     search,
     sortMode,
     statusCodeFilter,
+    enabledOnly,
     uiStateHydrated,
   ]);
 
@@ -420,11 +426,12 @@ export function AuthFilesPage() {
   const filesMatchingResultFilters = useMemo(
     () =>
       files.filter((file) => {
-        if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
+        if (enabledOnly && file.disabled === true) return false;
         if (disabledOnly && file.disabled !== true) return false;
+        if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
         return true;
       }),
-    [disabledOnly, files, problemOnly]
+    [disabledOnly, enabledOnly, files, problemOnly]
   );
 
   const archiveFilterCounts = useMemo(() => {
@@ -533,7 +540,7 @@ export function AuthFilesPage() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
-  const pageItems = sorted.slice(start, start + pageSize);
+  const pageItems = useMemo(() => sorted.slice(start, start + pageSize), [pageSize, sorted, start]);
   const selectablePageItems = useMemo(
     () => pageItems.filter((file) => !isRuntimeOnlyAuthFile(file)),
     [pageItems]
@@ -804,7 +811,7 @@ export function AuthFilesPage() {
   );
 
   const deleteAllButtonLabel = (() => {
-    if (archiveFilter !== 'all' || disabledOnly || statusCodeFilter !== 'all') {
+    if (archiveFilter !== 'all' || disabledOnly || enabledOnly || statusCodeFilter !== 'all') {
       return t('auth_files.delete_filtered_result_button');
     }
     if (problemOnly) {
@@ -851,10 +858,12 @@ export function AuthFilesPage() {
                   problemOnly,
                   disabledOnly,
                   statusCodeFilter,
+                  enabledOnly,
                   onResetFilterToAll: () => setFilter('all'),
                   onResetArchiveFilter: () => setArchiveFilter('active'),
                   onResetProblemOnly: () => setProblemOnly(false),
                   onResetDisabledOnly: () => setDisabledOnly(false),
+                  onResetEnabledOnly: () => setEnabledOnly(false),
                   onResetStatusCodeFilter: () => setStatusCodeFilter('all'),
                 })
               }
@@ -895,34 +904,48 @@ export function AuthFilesPage() {
                     rightElement={<IconSearch className={styles.searchIcon} size={18} />}
                   />
                 </div>
-                <div className={styles.filterItem}>
-                  <label>{t('auth_files.page_size_label')}</label>
-                  <input
-                    className={styles.pageSizeSelect}
-                    type="number"
-                    min={MIN_CARD_PAGE_SIZE}
-                    max={MAX_CARD_PAGE_SIZE}
-                    step={1}
-                    value={pageSizeInput}
-                    onChange={handlePageSizeChange}
-                    onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.currentTarget.blur();
+                <div className={styles.filterOptionsCard}>
+                  <div className={styles.filterOptionsControl}>
+                    <label>{t('auth_files.page_size_label')}</label>
+                    <input
+                      className={styles.pageSizeSelect}
+                      type="number"
+                      min={MIN_CARD_PAGE_SIZE}
+                      max={MAX_CARD_PAGE_SIZE}
+                      step={1}
+                      value={pageSizeInput}
+                      onChange={handlePageSizeChange}
+                      onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.currentTarget.blur();
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className={styles.filterOptionsControl}>
+                    <label>{t('auth_files.sort_label')}</label>
+                    <Select
+                      className={styles.sortSelect}
+                      value={sortMode}
+                      options={sortOptions}
+                      onChange={handleSortModeChange}
+                      ariaLabel={t('auth_files.sort_label')}
+                      fullWidth
+                    />
+                  </div>
+                  <div className={styles.filterOptionsToggle}>
+                    <ToggleSwitch
+                      checked={compactMode}
+                      onChange={(value) => setCompactMode(value)}
+                      ariaLabel={t('auth_files.compact_mode_label')}
+                      label={
+                        <span className={styles.filterToggleLabel}>
+                          {t('auth_files.compact_mode_label')}
+                        </span>
                       }
-                    }}
-                  />
-                </div>
-                <div className={styles.filterItem}>
-                  <label>{t('auth_files.sort_label')}</label>
-                  <Select
-                    className={styles.sortSelect}
-                    value={sortMode}
-                    options={sortOptions}
-                    onChange={handleSortModeChange}
-                    ariaLabel={t('auth_files.sort_label')}
-                    fullWidth
-                  />
+                    />
+                  </div>
                 </div>
                 <div className={`${styles.filterItem} ${styles.statusCodeFilterItem}`}>
                   <label>{t('auth_files.status_code_filter_label')}</label>

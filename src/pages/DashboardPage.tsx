@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { IconKey, IconBot, IconFileText, IconSatellite } from '@/components/ui/icons';
+import {
+  IconKey,
+  IconBot,
+  IconFileText,
+  IconSatellite,
+} from '@/components/ui/icons';
 import { useAuthStore, useConfigStore, useModelsStore } from '@/stores';
 import { authFilesApi } from '@/services/api';
 import { useApiKeysForModels } from '@/hooks/useApiKeysForModels';

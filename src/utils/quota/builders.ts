@@ -4,18 +4,18 @@
 
 import type {
   AntigravityQuotaBucket,
-  AntigravityQuotaGroup,
-  AntigravityQuotaSummaryPayload,
   GeminiCliParsedBucket,
   GeminiCliQuotaBucketState,
+  AntigravityQuotaGroup,
+  AntigravityQuotaSummaryPayload,
   KimiUsagePayload,
   KimiUsageDetail,
   KimiLimitItem,
   KimiLimitWindow,
   KimiQuotaRow,
 } from '@/types';
-import { GEMINI_CLI_GROUP_LOOKUP, GEMINI_CLI_GROUP_ORDER } from './constants';
 import { normalizeQuotaFraction, normalizeStringValue } from './parsers';
+import { GEMINI_CLI_GROUP_LOOKUP, GEMINI_CLI_GROUP_ORDER } from './constants';
 import { isIgnoredGeminiCliModel } from './validators';
 
 export function pickEarlierResetTime(current?: string, next?: string): string | undefined {
@@ -135,11 +135,11 @@ export function buildGeminiCliQuotaBuckets(
 }
 
 const ANTIGRAVITY_BUCKET_WINDOW_ORDER = new Map<string, number>([
-  ['weekly', 0],
-  ['week', 0],
-  ['5h', 1],
-  ['five-hour', 1],
-  ['five_hour', 1],
+  ['5h', 0],
+  ['five-hour', 0],
+  ['five_hour', 0],
+  ['weekly', 1],
+  ['week', 1],
 ]);
 
 function toStableId(value: string, fallback: string): string {
@@ -264,12 +264,13 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
 
 function kimiDurationToken(duration: number, rawTimeUnit: unknown): string {
   const unit = typeof rawTimeUnit === 'string' ? rawTimeUnit.trim().toUpperCase() : '';
-  if (unit === 'MINUTES') {
+  if (unit === 'SECONDS' || unit === 'SECOND') return `${duration}s`;
+  if (!unit || unit === 'MINUTES' || unit === 'MINUTE') {
     return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
   }
-  if (unit === 'HOURS') return `${duration}h`;
-  if (unit === 'DAYS') return `${duration}d`;
-  return `${duration}s`;
+  if (unit === 'HOURS' || unit === 'HOUR') return `${duration}h`;
+  if (unit === 'DAYS' || unit === 'DAY') return `${duration}d`;
+  return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
 }
 
 function kimiLimitLabel(

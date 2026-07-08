@@ -89,10 +89,7 @@ export const buildClaudeMessagesEndpoint = (baseUrl: string): string => {
   return `${trimmed}/v1/messages`;
 };
 
-export const buildGeminiGenerateContentEndpoint = (
-  baseUrl: string,
-  model: string
-): string => {
+export const buildGeminiGenerateContentEndpoint = (baseUrl: string, model: string): string => {
   const resource = buildGeminiModelResource(model);
   if (!resource) return '';
 

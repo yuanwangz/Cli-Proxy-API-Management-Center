@@ -121,6 +121,13 @@ export interface CodexRateLimitResetCredits {
   availableCount?: number | string;
 }
 
+export interface CodexRateLimitResetCredit {
+  id: string;
+  status: string;
+  grantedAt: string;
+  expiresAt: string;
+}
+
 export interface CodexUsagePayload {
   plan_type?: string;
   planType?: string;
@@ -210,6 +217,12 @@ export interface AntigravityQuotaGroup {
   resetTime?: string;
 }
 
+export interface AntigravityQuotaSubscription {
+  plan: string | null;
+  tierName: string | null;
+  tierId: string | null;
+}
+
 export interface AntigravityQuotaBucket {
   id: string;
   label: string;
@@ -224,6 +237,7 @@ export interface AntigravityQuotaState {
   groups: AntigravityQuotaGroup[];
   refreshedAt?: string;
   refreshedAtMs?: number;
+  subscription?: AntigravityQuotaSubscription | null;
   serverTimeOffsetMs?: number | null;
   error?: string;
   errorStatus?: number;
@@ -275,6 +289,8 @@ export interface CodexQuotaState {
   refreshedAtMs?: number;
   subscriptionActiveUntil?: string | number | null;
   rateLimitResetCreditsAvailableCount?: number | null;
+  rateLimitResetCredits?: CodexRateLimitResetCredit[];
+  rateLimitResetCreditsError?: string;
   error?: string;
   errorStatus?: number;
 }
@@ -366,7 +382,10 @@ export interface XaiBillingPayload {
 export interface XaiBillingSummary {
   monthlyLimitCents: number | null;
   usedCents: number | null;
+  includedUsedCents: number | null;
   onDemandCapCents: number | null;
+  onDemandUsedCents: number | null;
+  onDemandUsedPercent: number | null;
   billingPeriodStart?: string;
   billingPeriodEnd?: string;
   usedPercent: number | null;

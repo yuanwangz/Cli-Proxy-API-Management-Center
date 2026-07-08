@@ -26,11 +26,13 @@ type DeleteAllOptions = {
   problemOnly: boolean;
   disabledOnly: boolean;
   statusCodeFilter: AuthFilesStatusCodeFilter;
+  enabledOnly: boolean;
   onResetFilterToAll: () => void;
   onResetArchiveFilter: () => void;
   onResetProblemOnly: () => void;
   onResetDisabledOnly: () => void;
   onResetStatusCodeFilter: () => void;
+  onResetEnabledOnly: () => void;
 };
 
 export type UseAuthFilesDataResult = {
@@ -308,18 +310,21 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
         problemOnly,
         disabledOnly,
         statusCodeFilter,
+        enabledOnly,
         onResetFilterToAll,
         onResetArchiveFilter,
         onResetProblemOnly,
         onResetDisabledOnly,
         onResetStatusCodeFilter,
+        onResetEnabledOnly,
       } = deleteAllOptions;
       const isFiltered = filter !== 'all';
       const isArchiveFiltered = archiveFilter !== 'all';
       const isProblemOnly = problemOnly === true;
       const isDisabledOnly = disabledOnly === true;
       const isStatusCodeFiltered = statusCodeFilter !== 'all';
-      const hasResultFilter = isArchiveFiltered || isDisabledOnly || isStatusCodeFiltered;
+      const isEnabledOnly = enabledOnly === true;
+      const hasResultFilter = isArchiveFiltered || isDisabledOnly || isEnabledOnly || isStatusCodeFiltered;
       const typeLabel = isFiltered ? getTypeLabel(t, filter) : t('auth_files.filter_all');
       let confirmMessage = t('auth_files.delete_all_confirm');
       if (hasResultFilter) {
@@ -345,6 +350,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
               !isArchiveFiltered &&
               !isProblemOnly &&
               !isDisabledOnly &&
+              !isEnabledOnly &&
               !isStatusCodeFiltered
             ) {
               await authFilesApi.deleteAll();
@@ -370,6 +376,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
                 ) {
                   return false;
                 }
+                if (isEnabledOnly && file.disabled === true) return false;
                 return true;
               });
 
@@ -450,6 +457,9 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
               }
               if (isStatusCodeFiltered) {
                 onResetStatusCodeFilter();
+              }
+              if (isEnabledOnly) {
+                onResetEnabledOnly();
               }
             }
           } catch (err: unknown) {

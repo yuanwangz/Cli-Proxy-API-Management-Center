@@ -1,10 +1,17 @@
 export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
 export const AUTH_FILES_STATUS_CODE_FILTERS = ['all', '401', '429'] as const;
 export const AUTH_FILES_ARCHIVE_FILTERS = ['active', 'archived', 'all'] as const;
+export const AUTH_FILES_STATUS_FILTER_MODES = [
+  'all',
+  'enabled',
+  'disabled',
+  'problem',
+] as const;
 
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];
 export type AuthFilesStatusCodeFilter = (typeof AUTH_FILES_STATUS_CODE_FILTERS)[number];
 export type AuthFilesArchiveFilter = (typeof AUTH_FILES_ARCHIVE_FILTERS)[number];
+export type AuthFilesStatusFilterMode = (typeof AUTH_FILES_STATUS_FILTER_MODES)[number];
 
 export type AuthFilesUiState = {
   filter?: string;
@@ -12,6 +19,8 @@ export type AuthFilesUiState = {
   problemOnly?: boolean;
   disabledOnly?: boolean;
   statusCodeFilter?: AuthFilesStatusCodeFilter;
+  enabledOnly?: boolean;
+  statusFilterMode?: AuthFilesStatusFilterMode;
   compactMode?: boolean;
   search?: string;
   page?: number;
@@ -28,6 +37,9 @@ const AUTH_FILES_STATUS_CODE_FILTER_SET = new Set<AuthFilesStatusCodeFilter>(
   AUTH_FILES_STATUS_CODE_FILTERS
 );
 const AUTH_FILES_ARCHIVE_FILTER_SET = new Set<AuthFilesArchiveFilter>(AUTH_FILES_ARCHIVE_FILTERS);
+const AUTH_FILES_STATUS_FILTER_MODE_SET = new Set<AuthFilesStatusFilterMode>(
+  AUTH_FILES_STATUS_FILTER_MODES
+);
 
 export const isAuthFilesSortMode = (value: unknown): value is AuthFilesSortMode =>
   typeof value === 'string' && AUTH_FILES_SORT_MODE_SET.has(value as AuthFilesSortMode);
@@ -38,6 +50,10 @@ export const isAuthFilesStatusCodeFilter = (value: unknown): value is AuthFilesS
 
 export const isAuthFilesArchiveFilter = (value: unknown): value is AuthFilesArchiveFilter =>
   typeof value === 'string' && AUTH_FILES_ARCHIVE_FILTER_SET.has(value as AuthFilesArchiveFilter);
+
+export const isAuthFilesStatusFilterMode = (value: unknown): value is AuthFilesStatusFilterMode =>
+  typeof value === 'string' &&
+  AUTH_FILES_STATUS_FILTER_MODE_SET.has(value as AuthFilesStatusFilterMode);
 
 const readAuthFilesUiStateFromStorage = (
   storage: Pick<Storage, 'getItem'> | null | undefined

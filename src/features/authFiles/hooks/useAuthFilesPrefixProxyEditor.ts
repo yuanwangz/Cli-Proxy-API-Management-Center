@@ -4,10 +4,11 @@ import { authFilesApi, type AuthFileFieldsPatch } from '@/services/api';
 import type { AuthFileItem } from '@/types';
 import { useNotificationStore } from '@/stores';
 import {
-  applyCodexAuthFileWebsockets,
+  applyAuthFileWebsockets,
   normalizeProviderKey,
   parsePriorityValue,
-  readCodexAuthFileWebsockets,
+  readAuthFileWebsockets,
+  supportsAuthFileWebsockets,
 } from '@/features/authFiles/constants';
 
 type AuthFileHeaders = Record<string, string>;
@@ -258,8 +259,8 @@ const buildAuthFileFieldsPatch = (
     }
   }
 
-  if (editor.providerKey === 'codex' && editor.websocketsTouched) {
-    const originalWebsockets = readCodexAuthFileWebsockets(original);
+  if (supportsAuthFileWebsockets(editor.providerKey) && editor.websocketsTouched) {
+    const originalWebsockets = readAuthFileWebsockets(original);
     const nextWebsockets = Boolean(editor.websockets);
     if (nextWebsockets !== originalWebsockets) {
       patch.websockets = nextWebsockets;
@@ -324,7 +325,7 @@ const buildPrefixProxyUpdatedText = (
   applyHeadersPatch(next, patch.headers);
 
   if (patch.websockets !== undefined) {
-    next = applyCodexAuthFileWebsockets(next, patch.websockets);
+    next = applyAuthFileWebsockets(next, patch.websockets);
   }
 
   return JSON.stringify(next);
@@ -429,7 +430,9 @@ export function useAuthFilesPrefixProxyEditor(
       const prefix = typeof json.prefix === 'string' ? json.prefix : '';
       const proxyUrl = typeof json.proxy_url === 'string' ? json.proxy_url : '';
       const priority = parsePriorityValue(json.priority);
-      const websockets = providerKey === 'codex' ? readCodexAuthFileWebsockets(json) : false;
+      const websockets = supportsAuthFileWebsockets(providerKey)
+        ? readAuthFileWebsockets(json)
+        : false;
       const note = typeof json.note === 'string' ? json.note : '';
       const headers = json.headers;
       let headersText = '';
