@@ -153,7 +153,12 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
       fixedBrand
         ? allGroups.filter((group) => group.id === fixedBrand)
         : allGroups.filter(
-            (group) => group.id !== 'apikeyFun' && group.id !== 'code0' && group.id !== 'claudeApi'
+            (group) =>
+              group.id !== 'apikeyFun' &&
+              group.id !== 'code0' &&
+              group.id !== 'claudeApi' &&
+              group.id !== 'fennoAI' &&
+              group.id !== 'qiniuCloud'
           ),
     [allGroups, fixedBrand]
   );
@@ -259,29 +264,22 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
   ]);
 
   const totalResources = useMemo(
-    () =>
-      groups.reduce((sum, g) => sum + g.resources.filter((r) => !r.flags.isPlaceholder).length, 0),
+    () => groups.reduce((sum, g) => sum + g.resources.length, 0),
     [groups]
   );
 
   const totalActive = useMemo(
-    () =>
-      groups.reduce(
-        (sum, g) => sum + g.resources.filter((r) => !r.disabled && !r.flags.isPlaceholder).length,
-        0
-      ),
+    () => groups.reduce((sum, g) => sum + g.resources.filter((r) => !r.disabled).length, 0),
     [groups]
   );
 
   const providerFamilies = useMemo(
-    () => groups.filter((g) => g.resources.some((r) => !r.flags.isPlaceholder)).length,
+    () => groups.filter((g) => g.resources.length > 0).length,
     [groups]
   );
   const quickStartResource = useMemo(
     () =>
-      fixedBrand === 'apikeyFun' && activeGroup
-        ? (activeGroup.resources.find((r) => !r.flags.isPlaceholder) ?? null)
-        : null,
+      fixedBrand === 'apikeyFun' && activeGroup ? (activeGroup.resources[0] ?? null) : null,
     [activeGroup, fixedBrand]
   );
 
