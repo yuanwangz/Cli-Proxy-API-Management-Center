@@ -55,6 +55,65 @@
   }
 }
 
+.providerSectionCard {
+  :global(.card-header) {
+    margin-bottom: 0;
+  }
+
+  &:not(.providerSectionExpanded) {
+    > :not(:global(.card-header)) {
+      display: none;
+    }
+  }
+}
+
+.providerSectionExpanded {
+  :global(.card-header) {
+    margin-bottom: $spacing-md;
+  }
+}
+
+.sectionToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  width: 100%;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--primary-color);
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--primary-color) 72%, transparent);
+    outline-offset: 4px;
+  }
+}
+
+.sectionChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition:
+    color 0.18s ease,
+    transform 0.2s ease;
+}
+
+.sectionChevronExpanded {
+  transform: rotate(180deg);
+}
+
 .typeSummary {
   display: inline-flex;
   align-items: center;

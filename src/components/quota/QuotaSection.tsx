@@ -31,7 +31,7 @@ import { QuotaCard } from './QuotaCard';
 import type { QuotaStatusState } from './QuotaCard';
 import { useQuotaLoader } from './useQuotaLoader';
 import type { QuotaConfig } from './quotaConfigs';
-import { IconRefreshCw, IconSearch, IconX } from '@/components/ui/icons';
+import { IconChevronDown, IconRefreshCw, IconSearch, IconX } from '@/components/ui/icons';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
@@ -333,6 +333,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const [availabilityNowMs, setAvailabilityNowMs] = useState(() => Date.now());
   const [searchQuery, setSearchQuery] = useState('');
   const [resettingQuotaName, setResettingQuotaName] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const matchingFiles = useMemo(
     () => files.filter((file) => config.filterFn(file)),
@@ -560,13 +561,21 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   }, [availabilityNowMs, loading, matchingFiles, pageItems, quota, sectionLoading]);
 
   useEffect(() => {
-    if (disabled || loading || sectionLoading || expiredVisibleRefreshes.length === 0) return;
+    if (
+      !isExpanded ||
+      disabled ||
+      loading ||
+      sectionLoading ||
+      expiredVisibleRefreshes.length === 0
+    ) {
+      return;
+    }
 
     void refreshQuotaTargets(
       expiredVisibleRefreshes.map((entry) => entry.file),
       'page'
     );
-  }, [disabled, expiredVisibleRefreshes, loading, refreshQuotaTargets, sectionLoading]);
+  }, [disabled, expiredVisibleRefreshes, isExpanded, loading, refreshQuotaTargets, sectionLoading]);
 
   const handleAvailabilityChange = useCallback(
     (value: AvailabilityFilter) => {
@@ -693,16 +702,32 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   );
 
   const titleNode = (
-    <div className={styles.titleWrapper}>
-      <span>{t(`${config.i18nPrefix}.title`)}</span>
-      {displayFiles.length > 0 && <span className={styles.countBadge}>{displayFiles.length}</span>}
-    </div>
+    <button
+      type="button"
+      className={styles.sectionToggle}
+      aria-expanded={isExpanded}
+      onClick={() => setIsExpanded((current) => !current)}
+    >
+      <span className={styles.titleWrapper}>
+        <span>{t(`${config.i18nPrefix}.title`)}</span>
+        {displayFiles.length > 0 && (
+          <span className={styles.countBadge}>{displayFiles.length}</span>
+        )}
+      </span>
+      <span
+        className={`${styles.sectionChevron} ${isExpanded ? styles.sectionChevronExpanded : ''}`}
+        aria-hidden="true"
+      >
+        <IconChevronDown size={18} />
+      </span>
+    </button>
   );
 
   const isRefreshing = sectionLoading || loading;
 
   return (
     <Card
+      className={`${styles.providerSectionCard} ${isExpanded ? styles.providerSectionExpanded : ''}`}
       title={titleNode}
       extra={
         <div className={styles.headerActions}>
@@ -724,19 +749,21 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
               <strong>{typeSummary.unauthorized.toLocaleString()}</strong>
             </span>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            className={styles.refreshAllButton}
-            onClick={refreshSelected}
-            disabled={disabled || isRefreshing || selectedTargets.length === 0}
-            loading={sectionLoading && loadingScope === 'selected'}
-            title={t('quota_management.refresh_selected')}
-            aria-label={t('quota_management.refresh_selected')}
-          >
-            {!isRefreshing && <IconRefreshCw size={16} />}
-            {t('quota_management.refresh_selected')}
-          </Button>
+          {isExpanded && (
+            <Button
+              variant="secondary"
+              size="sm"
+              className={styles.refreshAllButton}
+              onClick={refreshSelected}
+              disabled={disabled || isRefreshing || selectedTargets.length === 0}
+              loading={sectionLoading && loadingScope === 'selected'}
+              title={t('quota_management.refresh_selected')}
+              aria-label={t('quota_management.refresh_selected')}
+            >
+              {!isRefreshing && <IconRefreshCw size={16} />}
+              {t('quota_management.refresh_selected')}
+            </Button>
+          )}
         </div>
       }
     >
