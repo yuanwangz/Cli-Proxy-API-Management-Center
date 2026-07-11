@@ -904,50 +904,38 @@ export function AuthFilesPage() {
                     rightElement={<IconSearch className={styles.searchIcon} size={18} />}
                   />
                 </div>
-                <div className={styles.filterOptionsCard}>
-                  <div className={styles.filterOptionsControl}>
-                    <label>{t('auth_files.page_size_label')}</label>
-                    <input
-                      className={styles.pageSizeSelect}
-                      type="number"
-                      min={MIN_CARD_PAGE_SIZE}
-                      max={MAX_CARD_PAGE_SIZE}
-                      step={1}
-                      value={pageSizeInput}
-                      onChange={handlePageSizeChange}
-                      onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.currentTarget.blur();
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className={styles.filterOptionsControl}>
-                    <label>{t('auth_files.sort_label')}</label>
-                    <Select
-                      className={styles.sortSelect}
-                      value={sortMode}
-                      options={sortOptions}
-                      onChange={handleSortModeChange}
-                      ariaLabel={t('auth_files.sort_label')}
-                      fullWidth
-                    />
-                  </div>
-                  <div className={styles.filterOptionsToggle}>
-                    <ToggleSwitch
-                      checked={compactMode}
-                      onChange={(value) => setCompactMode(value)}
-                      ariaLabel={t('auth_files.compact_mode_label')}
-                      label={
-                        <span className={styles.filterToggleLabel}>
-                          {t('auth_files.compact_mode_label')}
-                        </span>
+                <div className={`${styles.filterItem} ${styles.pageSizeFilterItem}`}>
+                  <label>{t('auth_files.page_size_label')}</label>
+                  <input
+                    className={styles.pageSizeSelect}
+                    type="number"
+                    min={MIN_CARD_PAGE_SIZE}
+                    max={MAX_CARD_PAGE_SIZE}
+                    step={1}
+                    value={pageSizeInput}
+                    onChange={handlePageSizeChange}
+                    onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.currentTarget.blur();
                       }
-                    />
-                  </div>
+                    }}
+                  />
                 </div>
-                <div className={`${styles.filterItem} ${styles.statusCodeFilterItem}`}>
+                <div className={`${styles.filterItem} ${styles.sortFilterItem}`}>
+                  <label>{t('auth_files.sort_label')}</label>
+                  <Select
+                    className={styles.sortSelect}
+                    value={sortMode}
+                    options={sortOptions}
+                    onChange={handleSortModeChange}
+                    ariaLabel={t('auth_files.sort_label')}
+                    fullWidth
+                  />
+                </div>
+                <div
+                  className={`${styles.filterItem} ${styles.statusCodeFilterItem} ${styles.statusCodeGroupItem}`}
+                >
                   <label>{t('auth_files.status_code_filter_label')}</label>
                   <div className={styles.statusCodeFilterGroup}>
                     {AUTH_FILES_STATUS_CODE_FILTERS.map((value) => {
@@ -973,7 +961,9 @@ export function AuthFilesPage() {
                     })}
                   </div>
                 </div>
-                <div className={`${styles.filterItem} ${styles.statusCodeFilterItem}`}>
+                <div
+                  className={`${styles.filterItem} ${styles.statusCodeFilterItem} ${styles.archiveFilterItem}`}
+                >
                   <label>{t('auth_files.archive_filter_label')}</label>
                   <div className={styles.statusCodeFilterGroup}>
                     {AUTH_FILES_ARCHIVE_FILTERS.map((value) => {

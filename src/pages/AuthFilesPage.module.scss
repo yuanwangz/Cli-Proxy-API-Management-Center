@@ -256,11 +256,7 @@
 
 .filterControls {
   display: grid;
-  grid-template-columns:
-    minmax(260px, 1fr)
-    minmax(108px, 0.35fr)
-    minmax(148px, 0.45fr)
-    minmax(248px, 0.8fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: 12px;
   align-items: flex-end;
 
@@ -275,7 +271,7 @@
   }
 
   @include tablet {
-    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 0.8fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 
   @include mobile {
@@ -285,6 +281,27 @@
 
 .filterSearchItem {
   min-width: 0;
+  grid-column: span 7;
+
+  @include tablet {
+    grid-column: 1 / -1;
+  }
+}
+
+.pageSizeFilterItem {
+  grid-column: span 2;
+
+  @include tablet {
+    grid-column: span 4;
+  }
+}
+
+.sortFilterItem {
+  grid-column: span 3;
+
+  @include tablet {
+    grid-column: span 8;
+  }
 }
 
 .filterItem {
@@ -313,8 +330,24 @@
 
 .statusCodeFilterItem {
   min-width: 0;
+  grid-column: span 6;
 
   @include tablet {
+    grid-column: 1 / -1;
+  }
+}
+
+.statusCodeGroupItem,
+.archiveFilterItem {
+  grid-column: span 6;
+}
+
+@include mobile {
+  .filterSearchItem,
+  .pageSizeFilterItem,
+  .sortFilterItem,
+  .statusCodeGroupItem,
+  .archiveFilterItem {
     grid-column: 1 / -1;
   }
 }

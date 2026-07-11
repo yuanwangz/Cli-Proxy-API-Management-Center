@@ -544,6 +544,28 @@
     "observed_additional_primary_window": "{{name}} {{duration}} 限額",
     "observed_additional_secondary_window": "{{name}} {{duration}} 限額"
   },
+  "gemini_cli_quota": {
+    "title": "Gemini CLI 配額",
+    "empty_title": "暫無 Gemini CLI 驗證",
+    "empty_desc": "上傳 Gemini CLI 驗證檔案後即可查看配額。",
+    "idle": "點擊此處重新整理配額",
+    "loading": "正在載入配額...",
+    "load_failed": "配額取得失敗：{{message}}",
+    "missing_auth_index": "驗證檔案缺少 auth_index",
+    "missing_project_id": "Gemini CLI 憑證缺少 Project ID",
+    "empty_buckets": "暫無配額資料",
+    "refresh_button": "重新整理配額",
+    "fetch_all": "取得全部",
+    "remaining_amount": "剩餘 {{count}}",
+    "tier_label": "層級",
+    "tier_free": "免費版",
+    "tier_legacy": "舊版",
+    "tier_standard": "標準版",
+    "tier_pro": "Pro",
+    "tier_ultra": "Ultra",
+    "credit_label": "Google One AI 點數",
+    "credit_amount": "{{count}} 點數"
+  },
   "kimi_quota": {
     "title": "Kimi 配額",
     "empty_title": "暫無 Kimi 驗證",

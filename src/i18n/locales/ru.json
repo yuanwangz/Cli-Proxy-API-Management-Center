@@ -532,6 +532,28 @@
     "observed_additional_primary_window": "{{name}}: лимит {{duration}}",
     "observed_additional_secondary_window": "{{name}}: лимит {{duration}}"
   },
+  "gemini_cli_quota": {
+    "title": "Квота Gemini CLI",
+    "empty_title": "Файлы авторизации Gemini CLI отсутствуют",
+    "empty_desc": "Загрузите учётные данные Gemini CLI, чтобы увидеть оставшуюся квоту.",
+    "idle": "Не загружено. Нажмите \"Обновить квоту\".",
+    "loading": "Загрузка квоты...",
+    "load_failed": "Не удалось загрузить квоту: {{message}}",
+    "missing_auth_index": "В файле авторизации отсутствует auth_index",
+    "missing_project_id": "В учётных данных Gemini CLI отсутствует идентификатор проекта",
+    "empty_buckets": "Данные по квоте отсутствуют",
+    "refresh_button": "Обновить квоту",
+    "fetch_all": "Получить все",
+    "remaining_amount": "Осталось {{count}}",
+    "tier_label": "Уровень",
+    "tier_free": "Бесплатный",
+    "tier_legacy": "Устаревший",
+    "tier_standard": "Стандартный",
+    "tier_pro": "Pro",
+    "tier_ultra": "Ultra",
+    "credit_label": "Google One AI кредиты",
+    "credit_amount": "{{count}} кредитов"
+  },
   "kimi_quota": {
     "title": "Квота Kimi",
     "empty_title": "Файлы авторизации Kimi отсутствуют",

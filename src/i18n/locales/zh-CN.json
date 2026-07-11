@@ -544,6 +544,28 @@
     "observed_additional_primary_window": "{{name}} {{duration}} 限额",
     "observed_additional_secondary_window": "{{name}} {{duration}} 限额"
   },
+  "gemini_cli_quota": {
+    "title": "Gemini CLI 额度",
+    "empty_title": "暂无 Gemini CLI 认证",
+    "empty_desc": "上传 Gemini CLI 认证文件后即可查看额度。",
+    "idle": "点击此处刷新额度",
+    "loading": "正在加载额度...",
+    "load_failed": "额度获取失败：{{message}}",
+    "missing_auth_index": "认证文件缺少 auth_index",
+    "missing_project_id": "Gemini CLI 凭证缺少 Project ID",
+    "empty_buckets": "暂无额度数据",
+    "refresh_button": "刷新额度",
+    "fetch_all": "获取全部",
+    "remaining_amount": "剩余 {{count}}",
+    "tier_label": "层级",
+    "tier_free": "免费版",
+    "tier_legacy": "旧版",
+    "tier_standard": "标准版",
+    "tier_pro": "Pro",
+    "tier_ultra": "Ultra",
+    "credit_label": "Google One AI 积分",
+    "credit_amount": "{{count}} 积分"
+  },
   "kimi_quota": {
     "title": "Kimi 额度",
     "empty_title": "暂无 Kimi 认证",

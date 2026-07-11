@@ -544,6 +544,28 @@
     "observed_additional_primary_window": "{{name}} {{duration}} limit",
     "observed_additional_secondary_window": "{{name}} {{duration}} limit"
   },
+  "gemini_cli_quota": {
+    "title": "Gemini CLI Quota",
+    "empty_title": "No Gemini CLI Auth Files",
+    "empty_desc": "Upload a Gemini CLI credential to view remaining quota.",
+    "idle": "Click here to refresh quota",
+    "loading": "Loading quota...",
+    "load_failed": "Failed to load quota: {{message}}",
+    "missing_auth_index": "Auth file missing auth_index",
+    "missing_project_id": "Gemini CLI credential missing project ID",
+    "empty_buckets": "No quota data available",
+    "refresh_button": "Refresh Quota",
+    "fetch_all": "Fetch All",
+    "remaining_amount": "Remaining {{count}}",
+    "tier_label": "Tier",
+    "tier_free": "Free",
+    "tier_legacy": "Legacy",
+    "tier_standard": "Standard",
+    "tier_pro": "Pro",
+    "tier_ultra": "Ultra",
+    "credit_label": "Google One AI Credits",
+    "credit_amount": "{{count}} credits"
+  },
   "kimi_quota": {
     "title": "Kimi Quota",
     "empty_title": "No Kimi Auth Files",

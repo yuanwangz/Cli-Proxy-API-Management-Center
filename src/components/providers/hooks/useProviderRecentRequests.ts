@@ -50,7 +50,15 @@ const normalizeApiKeyUsageResponse = (payload: ApiKeyUsageResponse): ProviderRec
   return usageByProvider;
 };
 
-const fetchProviderRecentRequests = async (): Promise<ProviderRecentRequests> => {
+const fetchProviderRecentRequests = async (force = false): Promise<ProviderRecentRequests> => {
+  // A mutation refresh must run after any older in-flight read; otherwise the
+  // clear-cooldown success path can reuse and render the pre-clear response.
+  if (force) {
+    while (inFlightRequest) {
+      await inFlightRequest.catch(() => EMPTY_USAGE_BY_PROVIDER);
+    }
+  }
+
   if (!inFlightRequest) {
     inFlightRequest = apiKeyUsageApi
       .getUsage()
@@ -90,7 +98,7 @@ export function useProviderRecentRequests(options: UseProviderRecentRequestsOpti
 
       setIsLoading(true);
       try {
-        const nextUsage = await fetchProviderRecentRequests();
+        const nextUsage = await fetchProviderRecentRequests(loadOptions.force === true);
         setUsageByProvider(nextUsage);
         return nextUsage;
       } catch {
