@@ -697,7 +697,7 @@ const buildCodexQuotaWindows = (payload: CodexUsagePayload, t: TFunction): Codex
   return windows;
 };
 
-const buildCodexRequestHeader = (file: AuthFileItem): Record<string, string> => {
+export const buildCodexRequestHeaders = (file: AuthFileItem): Record<string, string> => {
   const accountId = resolveCodexChatgptAccountId(file);
   const requestHeader: Record<string, string> = {
     ...CODEX_REQUEST_HEADERS,
@@ -710,7 +710,7 @@ const buildCodexRequestHeader = (file: AuthFileItem): Record<string, string> => 
 
 const fetchCodexResetCredits = async (
   authIndex: string,
-  requestHeader: Record<string, string>,
+  file: AuthFileItem,
   t: TFunction
 ): Promise<CodexResetCreditsData> => {
   try {
@@ -719,12 +719,7 @@ const fetchCodexResetCredits = async (
         authIndex,
         method: 'GET',
         url: CODEX_RATE_LIMIT_RESET_CREDITS_URL,
-        header: {
-          ...requestHeader,
-          Accept: 'application/json',
-          'OpenAI-Beta': 'codex-1',
-          Originator: 'Codex Desktop',
-        },
+        header: buildCodexRequestHeaders(file),
       },
       { timeout: CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS }
     );
@@ -769,7 +764,7 @@ const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
 
   const planTypeFromFile = resolveCodexPlanType(file);
   const subscriptionActiveUntil = resolveCodexSubscriptionActiveUntil(file);
-  const requestHeader = buildCodexRequestHeader(file);
+  const requestHeader = buildCodexRequestHeaders(file);
 
   const result = await apiCallApi.request({
     authIndex,
@@ -792,7 +787,7 @@ const fetchCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
   const usageResetCreditsAvailableCount = normalizeNumberValue(
     resetCredits?.available_count ?? resetCredits?.availableCount
   );
-  const resetCreditsData = await fetchCodexResetCredits(authIndex, requestHeader, t);
+  const resetCreditsData = await fetchCodexResetCredits(authIndex, file, t);
   const resetCreditsCountFromDetails =
     resetCreditsData.credits.length > 0 ? resetCreditsData.credits.length : null;
   const rateLimitResetCreditsAvailableCount =
@@ -833,7 +828,7 @@ const consumeCodexRateLimitResetCredit = async (
     throw new Error(t('codex_quota.missing_auth_index'));
   }
 
-  const requestHeader = buildCodexRequestHeader(file);
+  const requestHeader = buildCodexRequestHeaders(file);
 
   const result = await apiCallApi.request({
     authIndex,
