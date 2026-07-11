@@ -2170,7 +2170,7 @@ const resolveXaiUserId = (file: AuthFileItem): string | null => {
   return null;
 };
 
-const buildXaiRequestHeaders = (file: AuthFileItem): Record<string, string> => {
+export const buildXaiRequestHeaders = (file: AuthFileItem): Record<string, string> => {
   const headers: Record<string, string> = { ...XAI_REQUEST_HEADERS };
   const userId = resolveXaiUserId(file);
   if (userId) {

@@ -11,6 +11,7 @@ export interface UsageTokens {
 
 export interface UsageDetail {
   timestamp?: string;
+  provider?: string;
   source?: string;
   source_full?: string;
   source_hash?: string;

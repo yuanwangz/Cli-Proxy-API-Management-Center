@@ -252,6 +252,7 @@ const endpointParts = (endpoint: string): { method: string; path: string } => {
 
 export const inferProvider = (model: string, account: string, endpoint = ''): string => {
   const text = `${model} ${account} ${endpoint}`.toLowerCase();
+  if (text.includes('grok') || text.includes('xai') || text.includes('x.ai')) return 'xAI';
   if (text.includes('anthropic') || text.includes('claude')) return 'Anthropic';
   if (text.includes('gemini') || text.includes('google') || text.includes('vertex')) return 'Google';
   if (text.includes('codex') || text.includes('openai') || text.includes('gpt') || text.includes('o3')) return 'OpenAI';
@@ -259,6 +260,35 @@ export const inferProvider = (model: string, account: string, endpoint = ''): st
   if (text.includes('kimi') || text.includes('moonshot')) return 'Kimi';
   if (text.includes('azure')) return 'Azure OpenAI';
   return 'Other';
+};
+
+const usageProviderLabel = (provider: unknown): string => {
+  if (typeof provider !== 'string') return '';
+  const value = provider.trim();
+  switch (value.toLowerCase()) {
+    case 'xai':
+    case 'x.ai':
+      return 'xAI';
+    case 'claude':
+    case 'anthropic':
+      return 'Anthropic';
+    case 'gemini':
+    case 'gemini-cli':
+    case 'vertex':
+    case 'google':
+      return 'Google';
+    case 'codex':
+    case 'openai':
+    case 'openai-compatibility':
+      return 'OpenAI';
+    case 'antigravity':
+      return 'Antigravity';
+    case 'kimi':
+    case 'moonshot':
+      return 'Kimi';
+    default:
+      return value;
+  }
 };
 
 export const getModelPriceEstimate = (model: string): ModelPriceEstimate => {
@@ -324,7 +354,9 @@ export const flattenUsageEvents = (
         const latencyMs = latencyValue > 0 ? latencyValue : null;
         const statusCodeValue = toFiniteNumber(detail.status_code);
         const statusCode = statusCodeValue > 0 ? statusCodeValue : null;
-        const provider = inferProvider(modelName, `${account} ${authIndex}`, endpointName);
+        const provider =
+          usageProviderLabel(detail.provider) ||
+          inferProvider(modelName, `${account} ${authIndex}`, endpointName);
         const errorDetail = readErrorDetail(detail);
 
         events.push({
