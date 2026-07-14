@@ -16,6 +16,7 @@ import styles from './OAuthPage.module.scss';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
+import iconGemini from '@/assets/icons/gemini.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconKimiDark from '@/assets/icons/kimi-dark.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
@@ -28,6 +29,8 @@ interface ProviderState {
   status?: 'idle' | 'waiting' | 'success' | 'error';
   error?: string;
   polling?: boolean;
+  projectId?: string;
+  projectIdError?: string;
   callbackUrl?: string;
   callbackSubmitting?: boolean;
   callbackStatus?: 'success' | 'error';
@@ -92,6 +95,12 @@ const PROVIDERS: BuiltInOAuthProviderCard[] = [
   },
   {
     kind: 'builtin',
+    id: 'gemini-cli',
+    titleKey: 'auth_login.gemini_cli_oauth_title',
+    icon: iconGemini,
+  },
+  {
+    kind: 'builtin',
     id: 'kimi',
     titleKey: 'auth_login.kimi_oauth_title',
     icon: { light: iconKimiLight, dark: iconKimiDark },
@@ -105,7 +114,7 @@ const PROVIDERS: BuiltInOAuthProviderCard[] = [
 ];
 
 const BUILTIN_PROVIDER_IDS = new Set<string>(PROVIDERS.map((provider) => provider.id));
-const CALLBACK_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'xai']);
+const CALLBACK_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai']);
 const XAI_CALLBACK_URL = 'http://127.0.0.1:56121/callback';
 const SUCCESS_RESET_DELAY_MS = 5000;
 const getProviderI18nPrefix = (provider: string) => provider.replace('-', '_');
@@ -345,9 +354,14 @@ export function OAuthPage() {
   const resetProviderAttempt = (provider: string) => {
     clearProviderTimers(provider);
     setStates((prev) => {
+      const current = prev[provider] ?? {};
+      const next: ProviderState = {};
+      if (provider === 'gemini-cli' && current.projectId !== undefined) {
+        next.projectId = current.projectId;
+      }
       return {
         ...prev,
-        [provider]: {},
+        [provider]: next,
       };
     });
   };
@@ -403,6 +417,17 @@ export function OAuthPage() {
 
   const startAuth = async (provider: string) => {
     clearProviderTimers(provider);
+    const geminiState = provider === 'gemini-cli' ? states[provider] : undefined;
+    const rawProjectId = provider === 'gemini-cli' ? (geminiState?.projectId || '').trim() : '';
+    // Leave blank to auto-select the first available project; enter ALL to fetch all projects.
+    const projectId = rawProjectId
+      ? rawProjectId.toUpperCase() === 'ALL'
+        ? 'ALL'
+        : rawProjectId
+      : undefined;
+    if (provider === 'gemini-cli') {
+      updateProviderState(provider, { projectIdError: undefined });
+    }
     updateProviderState(provider, {
       url: undefined,
       state: undefined,
@@ -414,7 +439,10 @@ export function OAuthPage() {
       callbackUrl: '',
     });
     try {
-      const res = await oauthApi.startAuth(provider);
+      const res = await oauthApi.startAuth(
+        provider,
+        provider === 'gemini-cli' ? { projectId: projectId || undefined } : undefined
+      );
       if (!res.state) {
         const message = t('auth_login.missing_state');
         updateProviderState(provider, {
@@ -602,6 +630,24 @@ export function OAuthPage() {
               >
                 <div className={styles.cardContent}>
                   <div className={styles.cardHint}>{getProviderText(provider, 'oauth_hint')}</div>
+                  {provider.id === 'gemini-cli' && (
+                    <div className={styles.geminiProjectField}>
+                      <Input
+                        label={t('auth_login.gemini_cli_project_id_label')}
+                        hint={t('auth_login.gemini_cli_project_id_hint')}
+                        value={state.projectId || ''}
+                        error={state.projectIdError}
+                        disabled={Boolean(state.polling)}
+                        onChange={(e) =>
+                          updateProviderState(provider.id, {
+                            projectId: e.target.value,
+                            projectIdError: undefined,
+                          })
+                        }
+                        placeholder={t('auth_login.gemini_cli_project_id_placeholder')}
+                      />
+                    </div>
+                  )}
                   {state.url && (
                     <div className={styles.authUrlBox}>
                       <div className={styles.authUrlLabel}>

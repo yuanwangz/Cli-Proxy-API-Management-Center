@@ -8,7 +8,13 @@ import {
   normalizeManagementOAuthProviderKey,
 } from '@/utils/providerKeys';
 
-export type BuiltInOAuthProvider = 'codex' | 'anthropic' | 'antigravity' | 'kimi' | 'xai';
+export type BuiltInOAuthProvider =
+  | 'codex'
+  | 'anthropic'
+  | 'antigravity'
+  | 'gemini-cli'
+  | 'kimi'
+  | 'xai';
 
 export interface OAuthStartResponse {
   url: string;
@@ -19,7 +25,12 @@ export interface OAuthCallbackResponse {
   status: 'ok';
 }
 
-const WEBUI_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'xai']);
+const WEBUI_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai']);
+
+// Management oauth-callback expects provider "gemini" for Gemini CLI sessions.
+const CALLBACK_PROVIDER_MAP: Record<string, string> = {
+  'gemini-cli': 'gemini',
+};
 
 const normalizeProviderForManagementPath = (provider: string): string => {
   const key = normalizeManagementOAuthProviderKey(provider);
@@ -30,11 +41,14 @@ const normalizeProviderForManagementPath = (provider: string): string => {
 };
 
 export const oauthApi = {
-  startAuth: (provider: string) => {
+  startAuth: (provider: string, options?: { projectId?: string }) => {
     const providerKey = normalizeProviderForManagementPath(provider);
     const params: Record<string, string | boolean> = {};
     if (WEBUI_SUPPORTED.has(providerKey)) {
       params.is_webui = true;
+    }
+    if (providerKey === 'gemini-cli' && options?.projectId) {
+      params.project_id = options.projectId;
     }
     return apiClient.get<OAuthStartResponse>(`/${providerKey}-auth-url`, {
       params: Object.keys(params).length ? params : undefined,
@@ -48,8 +62,9 @@ export const oauthApi = {
 
   submitCallback: (provider: string, redirectUrl: string) => {
     const providerKey = normalizeProviderForManagementPath(provider);
+    const callbackProvider = CALLBACK_PROVIDER_MAP[providerKey] ?? providerKey;
     return apiClient.post<OAuthCallbackResponse>('/oauth-callback', {
-      provider: providerKey,
+      provider: callbackProvider,
       redirect_url: redirectUrl,
     });
   },
