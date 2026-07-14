@@ -23,6 +23,7 @@ export interface UsageEvent {
   cachedTokens: number;
   totalTokens: number;
   latencyMs: number | null;
+  ttftMs: number | null;
   failed: boolean;
   statusCode: number | null;
   errorDetail: string;
@@ -94,7 +95,10 @@ export interface RecentUsageRow {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cachedTokens: number;
+  cachePercent: number | null;
   latencyMs: number | null;
+  ttftMs: number | null;
   statusCode: number | null;
   error: string;
   errorDetail: string;
@@ -352,6 +356,8 @@ export const flattenUsageEvents = (
         const accountKey = sourceHash || accountFull || account || authIndex || 'unknown';
         const latencyValue = toFiniteNumber(detail.latency_ms);
         const latencyMs = latencyValue > 0 ? latencyValue : null;
+        const ttftValue = toFiniteNumber(detail.ttft_ms);
+        const ttftMs = ttftValue > 0 ? ttftValue : null;
         const statusCodeValue = toFiniteNumber(detail.status_code);
         const statusCode = statusCodeValue > 0 ? statusCodeValue : null;
         const provider =
@@ -382,6 +388,7 @@ export const flattenUsageEvents = (
           cachedTokens,
           totalTokens,
           latencyMs,
+          ttftMs,
           failed: detail.failed === true,
           statusCode,
           errorDetail,
@@ -687,7 +694,10 @@ export const buildUsageAnalytics = (
       inputTokens: event.inputTokens,
       outputTokens: event.outputTokens,
       totalTokens: event.totalTokens,
+      cachedTokens: event.cachedTokens,
+      cachePercent: computeCachePercent(event.cachedTokens, event.inputTokens),
       latencyMs: event.latencyMs,
+      ttftMs: event.ttftMs,
       statusCode: event.statusCode,
       error: event.failed ? '请求失败' : '—',
       errorDetail: event.errorDetail,
@@ -715,6 +725,30 @@ export const formatLatency = (value: number | null): string => {
   if (value >= 1000) return `${(value / 1000).toFixed(2)}s`;
   return `${Math.round(value)} ms`;
 };
+
+/** Prompt-cache hit rate: cached_tokens / input_tokens. */
+export const computeCachePercent = (cachedTokens: number, inputTokens: number): number | null => {
+  if (!Number.isFinite(cachedTokens) || !Number.isFinite(inputTokens) || inputTokens <= 0) {
+    return null;
+  }
+  const pct = Math.round((Math.max(0, cachedTokens) / inputTokens) * 100);
+  return Math.max(0, Math.min(100, pct));
+};
+
+export const formatTokenTriple = (
+  inputTokens: number,
+  outputTokens: number,
+  totalTokens: number
+): string =>
+  `${formatCompactNumber(inputTokens)} / ${formatCompactNumber(outputTokens)} / ${formatCompactNumber(totalTokens)}`;
+
+export const formatCachePercent = (value: number | null): string => {
+  if (value === null || !Number.isFinite(value)) return '—';
+  return `${Math.round(value)}%`;
+};
+
+export const formatLatencyPair = (ttftMs: number | null, latencyMs: number | null): string =>
+  `${formatLatency(ttftMs)} / ${formatLatency(latencyMs)}`;
 
 export const formatCurrency = (value: number): string => {
   const fractionDigits = Math.abs(value) > 0 && Math.abs(value) < 0.01 ? 4 : 2;

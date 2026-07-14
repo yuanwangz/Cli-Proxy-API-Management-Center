@@ -20,6 +20,7 @@ import {
   isRuntimeOnlyAuthFile,
   resolveAuthProvider,
 } from '@/utils/quota';
+import { probeXaiCredential } from '@/utils/xaiInspection';
 
 export type CredentialInspectionStatus =
   | 'checking'
@@ -119,6 +120,100 @@ export const isCredentialInspectionSupported = (file: AuthFileItem): boolean => 
   }
   const provider = resolveAuthProvider(file);
   return QUOTA_CONFIG_BY_PROVIDER.has(provider);
+};
+
+const inspectViaQuota = async (
+  target: InspectionTarget,
+  t: TFunction
+): Promise<{
+  status: CredentialInspectionStatus;
+  message: string;
+  statusCode?: number;
+}> => {
+  try {
+    const data = await target.config.fetchQuota(target.file, t);
+    const checkedAt = new Date().toISOString();
+    const state = {
+      ...target.config.buildSuccessState(data),
+      refreshedAt: checkedAt,
+      refreshedAtMs: Date.now(),
+    };
+
+    await quotaApi
+      .saveSnapshot({
+        provider: target.config.type,
+        authId: typeof target.file.id === 'string' ? target.file.id : undefined,
+        authIndex: target.authIndex,
+        fileName: target.file.name,
+        quota: state,
+      })
+      .catch(() => {});
+
+    return {
+      status: 'healthy',
+      message: t('auth_files.inspection_healthy'),
+    };
+  } catch (err: unknown) {
+    const statusCode = getStatusFromError(err);
+    const message = err instanceof Error ? err.message : t('common.unknown_error');
+    const status: CredentialInspectionStatus =
+      statusCode === 401 ? 'disabled' : statusCode === 429 ? 'limited' : 'error';
+
+    return {
+      status,
+      message:
+        statusCode === 401
+          ? t('auth_files.inspection_unauthorized_disabled')
+          : statusCode === 429
+            ? t('auth_files.inspection_rate_limited')
+            : message,
+      statusCode,
+    };
+  }
+};
+
+const inspectXaiCredential = async (
+  target: InspectionTarget,
+  t: TFunction
+): Promise<{
+  status: CredentialInspectionStatus;
+  message: string;
+  statusCode?: number;
+}> => {
+  const outcome = await probeXaiCredential(target.file, target.authIndex);
+  const message = t(`auth_files.${outcome.reasonKey}`, {
+    defaultValue: outcome.reasonFallback,
+  });
+
+  // Best-effort billing snapshot when chat is healthy so quota page still gets data.
+  if (outcome.uiStatus === 'healthy') {
+    try {
+      const data = await target.config.fetchQuota(target.file, t);
+      const checkedAt = new Date().toISOString();
+      const state = {
+        ...target.config.buildSuccessState(data),
+        refreshedAt: checkedAt,
+        refreshedAtMs: Date.now(),
+      };
+      await quotaApi
+        .saveSnapshot({
+          provider: target.config.type,
+          authId: typeof target.file.id === 'string' ? target.file.id : undefined,
+          authIndex: target.authIndex,
+          fileName: target.file.name,
+          quota: state,
+        })
+        .catch(() => {});
+    } catch {
+      // Chat healthy is authoritative; billing failure must not flip status.
+    }
+  }
+
+  return {
+    status: outcome.uiStatus,
+    message,
+    statusCode: outcome.httpStatus,
+  };
 };
 
 export function useCredentialInspection() {
@@ -262,31 +357,20 @@ export function useCredentialInspection() {
             const name = target.file.name;
 
             try {
-              const data = await target.config.fetchQuota(target.file, t);
-              const state = {
-                ...target.config.buildSuccessState(data),
-                refreshedAt: checkedAtIso,
-                refreshedAtMs: checkedAtMs,
-              };
-
-              await quotaApi
-                .saveSnapshot({
-                  provider,
-                  authId: typeof target.file.id === 'string' ? target.file.id : undefined,
-                  authIndex: target.authIndex,
-                  fileName: name,
-                  quota: state,
-                })
-                .catch(() => {});
+              const outcome =
+                provider === 'xai'
+                  ? await inspectXaiCredential(target, t)
+                  : await inspectViaQuota(target, t);
 
               pushResult({
                 name,
                 provider,
-                status: 'healthy',
-                message: t('auth_files.inspection_healthy'),
+                status: outcome.status,
+                message: outcome.message,
                 checkedAt: checkedAtIso,
                 checkedAtMs,
                 durationMs: Math.round(performance.now() - start),
+                statusCode: outcome.statusCode,
                 scope,
               });
             } catch (err: unknown) {

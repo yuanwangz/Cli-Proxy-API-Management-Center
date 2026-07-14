@@ -35,10 +35,13 @@ import {
 import {
   USAGE_TIME_RANGE_OPTIONS,
   buildUsageAnalytics,
+  formatCachePercent,
   formatCompactNumber,
   formatCurrency,
   formatLatency,
+  formatLatencyPair,
   formatPercent,
+  formatTokenTriple,
   getModelPriceEstimate,
   maskCredential,
   type GroupRow,
@@ -855,10 +858,9 @@ function RecentRequestsTable({
               <th>模型</th>
               <th>端点</th>
               <th>凭证账号</th>
-              <th>输入</th>
-              <th>输出</th>
-              <th>总量</th>
-              <th>延迟</th>
+              <th title="输入 / 输出 / 总量">Token</th>
+              <th title="缓存 Token 占输入的百分比">缓存</th>
+              <th title="首字延迟 / 总延迟">延迟</th>
               <th>错误</th>
             </tr>
           </thead>
@@ -882,10 +884,13 @@ function RecentRequestsTable({
                     apiKey={row.apiKey}
                   />
                 </td>
-                <td>{formatCompactNumber(row.inputTokens)}</td>
-                <td>{formatCompactNumber(row.outputTokens)}</td>
-                <td>{formatCompactNumber(row.totalTokens)}</td>
-                <td>{formatLatency(row.latencyMs)}</td>
+                <td title="输入 / 输出 / 总量">
+                  {formatTokenTriple(row.inputTokens, row.outputTokens, row.totalTokens)}
+                </td>
+                <td title={row.cachedTokens > 0 ? `缓存 Token ${formatCompactNumber(row.cachedTokens)}` : undefined}>
+                  {formatCachePercent(row.cachePercent)}
+                </td>
+                <td title="首字延迟 / 总延迟">{formatLatencyPair(row.ttftMs, row.latencyMs)}</td>
                 <td>
                   <FailureDetailChip
                     label={row.error}

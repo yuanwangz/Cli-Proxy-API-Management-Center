@@ -19,6 +19,7 @@ export interface UsageDetail {
   api_key_hash?: string;
   auth_index?: string | number | null;
   latency_ms?: number | null;
+  ttft_ms?: number | null;
   status_code?: number | null;
   error?: unknown;
   error_detail?: unknown;
