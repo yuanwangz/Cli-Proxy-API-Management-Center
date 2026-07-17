@@ -498,21 +498,33 @@
 .quotaCardActions {
   display: flex;
   justify-content: flex-end;
-  gap: $spacing-xs;
-  flex-wrap: wrap;
-  padding-top: $spacing-xs;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  padding-top: 2px;
+  min-width: 0;
 }
 
 .quotaResetCreditButton:global(.btn.btn-sm),
 .quotaRefreshButton:global(.btn.btn-sm) {
+  flex-shrink: 0;
   border-radius: 999px;
-  padding-inline: 12px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1.2;
 
   > span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
     white-space: nowrap;
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
   }
 }
 
@@ -1036,7 +1048,7 @@
 .quotaListHeader,
 .quotaListRow {
   display: grid;
-  grid-template-columns: 30px minmax(230px, 320px) minmax(360px, 1fr) 104px 112px;
+  grid-template-columns: 30px minmax(230px, 320px) minmax(360px, 1fr) 104px minmax(118px, 132px);
   gap: 8px;
   align-items: center;
 }

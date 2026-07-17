@@ -907,10 +907,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                       onClick={() => resetQuotaForFile(item)}
                       disabled={!canUseQuotaAction || isResettingQuota}
                       loading={isResettingQuota}
-                      title={resetButtonLabel}
+                      title={t('codex_quota.reset_confirm_title')}
                       aria-label={resetButtonLabel}
                     >
-                      {!isResettingQuota && <IconRefreshCw size={14} />}
+                      {!isResettingQuota && <IconRefreshCw size={12} />}
                       {resetButtonLabel}
                     </Button>
                   ) : undefined;

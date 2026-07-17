@@ -1242,23 +1242,35 @@
 }
 
 .quotaResetCreditButton:global(.btn.btn-sm) {
+  flex-shrink: 0;
   border-radius: 999px;
-  padding-inline: 12px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1.2;
 
   > span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
     white-space: nowrap;
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
   }
 }
 
 .quotaCardActions {
   display: flex;
   justify-content: flex-end;
-  gap: $spacing-xs;
-  flex-wrap: wrap;
-  padding-top: $spacing-xs;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  padding-top: 2px;
+  min-width: 0;
 }
 
 .quotaError {

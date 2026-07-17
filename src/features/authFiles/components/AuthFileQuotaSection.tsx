@@ -219,10 +219,10 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         onClick={() => resetQuotaForFile()}
         disabled={!canUseResetQuota}
         loading={resettingQuota}
-        title={resetButtonLabel}
+        title={t('codex_quota.reset_confirm_title')}
         aria-label={resetButtonLabel}
       >
-        {!resettingQuota && <IconRefreshCw size={14} />}
+        {!resettingQuota && <IconRefreshCw size={12} />}
         {resetButtonLabel}
       </Button>
     ) : undefined;
