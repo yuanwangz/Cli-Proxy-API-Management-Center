@@ -132,14 +132,26 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
 
     const config = getQuotaConfig(quotaType) as unknown as {
       resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
+      canResetQuota?: (quota: unknown) => boolean;
       buildSuccessState: (data: unknown) => unknown;
     };
     const resetQuota = config.resetQuota;
     if (!resetQuota) return;
+    if (config.canResetQuota && !config.canResetQuota(quota)) return;
+
+    const resetCount = Math.max(
+      0,
+      Math.floor(
+        Number(
+          (quota as { rateLimitResetCreditsAvailableCount?: number | null } | undefined)
+            ?.rateLimitResetCreditsAvailableCount ?? 0
+        ) || 0
+      )
+    );
 
     showConfirmation({
       title: t('codex_quota.reset_confirm_title'),
-      message: t('codex_quota.reset_confirm_message', { name: file.name }),
+      message: t('codex_quota.reset_confirm_message', { name: file.name, count: resetCount }),
       confirmText: t('codex_quota.reset_confirm_button'),
       variant: 'primary',
       onConfirm: async () => {
@@ -167,7 +179,7 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   }, [
     disableControls,
     file,
-    quota?.status,
+    quota,
     quotaType,
     resettingQuota,
     showConfirmation,
@@ -187,6 +199,16 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
   const canRefreshQuota = !disableControls && !file.disabled && !resettingQuota;
   const canUseResetQuota = canRefreshQuota && quotaStatus !== 'loading';
   const showResetQuotaAction = quota !== undefined && Boolean(config.canResetQuota?.(quota));
+  const resetCreditsCount = Math.max(
+    0,
+    Math.floor(
+      Number(
+        (quota as { rateLimitResetCreditsAvailableCount?: number | null } | undefined)
+          ?.rateLimitResetCreditsAvailableCount ?? 0
+      ) || 0
+    )
+  );
+  const resetButtonLabel = t('codex_quota.reset_button', { count: resetCreditsCount });
   const resetQuotaAction =
     config.resetQuota && showResetQuotaAction ? (
       <Button
@@ -197,11 +219,11 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
         onClick={() => resetQuotaForFile()}
         disabled={!canUseResetQuota}
         loading={resettingQuota}
-        title={t('codex_quota.reset_button')}
-        aria-label={t('codex_quota.reset_button')}
+        title={resetButtonLabel}
+        aria-label={resetButtonLabel}
       >
         {!resettingQuota && <IconRefreshCw size={14} />}
-        {t('codex_quota.reset_button')}
+        {resetButtonLabel}
       </Button>
     ) : undefined;
   const quotaErrorMessage = resolveQuotaErrorMessage(

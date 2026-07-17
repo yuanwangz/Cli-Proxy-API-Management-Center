@@ -848,6 +848,34 @@ const resetCodexQuota = async (file: AuthFileItem, t: TFunction): Promise<CodexQ
   return fetchCodexQuota(file, t);
 };
 
+/** Available manual reset credits on a Codex quota snapshot. */
+export const getCodexResetCreditsAvailableCount = (
+  quota: Pick<CodexQuotaState, 'rateLimitResetCreditsAvailableCount'> | null | undefined
+): number => {
+  const count = quota?.rateLimitResetCreditsAvailableCount;
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) {
+    return 0;
+  }
+  return Math.floor(count);
+};
+
+/**
+ * Whether a Codex quota card may show the "reset quota" action.
+ * Free-tier credentials never qualify; paid plans need available reset credits.
+ */
+export const canResetCodexQuota = (
+  quota: Pick<
+    CodexQuotaState,
+    'status' | 'planType' | 'rateLimitResetCreditsAvailableCount'
+  > | null | undefined
+): boolean => {
+  if (!quota) return false;
+  if (quota.status && quota.status !== 'success') return false;
+  const plan = normalizePlanType(quota.planType);
+  if (plan === 'free') return false;
+  return getCodexResetCreditsAvailableCount(quota) > 0;
+};
+
 const codexWindowDurationMinutes = (window: CodexQuotaWindow): number | null => {
   if (typeof window.windowMinutes === 'number' && Number.isFinite(window.windowMinutes)) {
     return window.windowMinutes;
@@ -1931,7 +1959,7 @@ export const CODEX_CONFIG: QuotaConfig<CodexQuotaState, CodexQuotaData> = {
   filterFn: (file) => isCodexFile(file) && !isDisabledAuthFile(file) && !isArchivedAuthFile(file),
   fetchQuota: fetchCodexQuota,
   resetQuota: resetCodexQuota,
-  canResetQuota: (quota) => (quota.rateLimitResetCreditsAvailableCount ?? 0) > 0,
+  canResetQuota: canResetCodexQuota,
   storeSelector: (state) => state.codexQuota,
   storeSetter: 'setCodexQuota',
   buildLoadingState: () => ({

@@ -650,9 +650,24 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       if (quota[file.name]?.status === 'loading') return;
       if (resettingQuotaName === file.name) return;
 
+      const fileQuota = quota[file.name];
+      if (config.canResetQuota && !config.canResetQuota(fileQuota)) return;
+      const resetCount = Math.max(
+        0,
+        Math.floor(
+          Number(
+            (fileQuota as { rateLimitResetCreditsAvailableCount?: number | null } | undefined)
+              ?.rateLimitResetCreditsAvailableCount ?? 0
+          ) || 0
+        )
+      );
+
       showConfirmation({
         title: t('codex_quota.reset_confirm_title'),
-        message: t('codex_quota.reset_confirm_message', { name: file.name }),
+        message: t('codex_quota.reset_confirm_message', {
+          name: file.name,
+          count: resetCount,
+        }),
         confirmText: t('codex_quota.reset_confirm_button'),
         variant: 'primary',
         onConfirm: async () => {
@@ -870,6 +885,18 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                   !disabled && !item.disabled && itemQuota?.status !== 'loading' && !sectionLoading;
                 const showResetQuotaAction =
                   itemQuota !== undefined && Boolean(config.canResetQuota?.(itemQuota));
+                const resetCreditsCount = Math.max(
+                  0,
+                  Math.floor(
+                    Number(
+                      (itemQuota as { rateLimitResetCreditsAvailableCount?: number | null } | undefined)
+                        ?.rateLimitResetCreditsAvailableCount ?? 0
+                    ) || 0
+                  )
+                );
+                const resetButtonLabel = t('codex_quota.reset_button', {
+                  count: resetCreditsCount,
+                });
                 const resetQuotaAction =
                   config.resetQuota && showResetQuotaAction ? (
                     <Button
@@ -880,11 +907,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                       onClick={() => resetQuotaForFile(item)}
                       disabled={!canUseQuotaAction || isResettingQuota}
                       loading={isResettingQuota}
-                      title={t('codex_quota.reset_button')}
-                      aria-label={t('codex_quota.reset_button')}
+                      title={resetButtonLabel}
+                      aria-label={resetButtonLabel}
                     >
                       {!isResettingQuota && <IconRefreshCw size={14} />}
-                      {t('codex_quota.reset_button')}
+                      {resetButtonLabel}
                     </Button>
                   ) : undefined;
 
