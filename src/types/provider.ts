@@ -75,5 +75,7 @@ export interface OpenAIProviderConfig {
   disableCooling?: boolean;
   failureWarmup?: FailureWarmupConfig;
   authIndex?: string;
+  /** Original index in the backend openai-compatibility array. */
+  sourceIndex?: number;
   [key: string]: unknown;
 }
