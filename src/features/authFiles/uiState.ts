@@ -1,5 +1,5 @@
 export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
-export const AUTH_FILES_STATUS_CODE_FILTERS = ['all', '401', '429'] as const;
+export const AUTH_FILES_STATUS_CODE_FILTERS = ['all', '401', '403', '429'] as const;
 export const AUTH_FILES_ARCHIVE_FILTERS = ['active', 'archived', 'all'] as const;
 export const AUTH_FILES_STATUS_FILTER_MODES = [
   'all',

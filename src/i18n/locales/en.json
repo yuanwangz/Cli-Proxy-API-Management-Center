@@ -363,6 +363,7 @@
     "status_code_filter_label": "Status code",
     "status_code_filter_all": "All",
     "status_code_filter_401": "401",
+    "status_code_filter_403": "403",
     "status_code_filter_429": "429",
     "page_size_unit": "items",
     "filter_gemini-cli": "Gemini CLI",

@@ -457,11 +457,13 @@ export function AuthFilesPage() {
     const counts: Record<AuthFilesStatusCodeFilter, number> = {
       all: filesMatchingBaseStatusFilters.length,
       '401': 0,
+      '403': 0,
       '429': 0,
     };
     filesMatchingBaseStatusFilters.forEach((file) => {
       const code = getQuotaAwareStatusCode(file);
       if (code === 401) counts['401'] += 1;
+      if (code === 403) counts['403'] += 1;
       if (code === 429) counts['429'] += 1;
     });
     return counts;

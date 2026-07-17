@@ -363,6 +363,7 @@
     "status_code_filter_label": "状态码",
     "status_code_filter_all": "全部",
     "status_code_filter_401": "401",
+    "status_code_filter_403": "403",
     "status_code_filter_429": "429",
     "page_size_unit": "个/页",
     "filter_gemini-cli": "Gemini CLI",

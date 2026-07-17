@@ -356,6 +356,7 @@
     "status_code_filter_label": "Код статуса",
     "status_code_filter_all": "Все",
     "status_code_filter_401": "401",
+    "status_code_filter_403": "403",
     "status_code_filter_429": "429",
     "page_size_unit": "элементов",
     "filter_gemini-cli": "Gemini CLI",
