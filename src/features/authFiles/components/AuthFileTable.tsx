@@ -36,6 +36,7 @@ import {
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
+  supportsAuthFileManualRefresh,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import styles from '@/pages/AuthFilesPage.module.scss';
@@ -50,12 +51,14 @@ export type AuthFileTableProps = {
   disableControls: boolean;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
+  manualRefreshing: Record<string, boolean>;
   archiveUpdating: Record<string, boolean>;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   inspectionResults: Record<string, CredentialInspectionResult>;
   inspectionRunning: boolean;
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
+  onManualRefresh: (file: AuthFileItem) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
   onDelete: (name: string) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
@@ -98,12 +101,14 @@ export function AuthFileTable({
   disableControls,
   deleting,
   statusUpdating,
+  manualRefreshing,
   archiveUpdating,
   statusBarCache,
   inspectionResults,
   inspectionRunning,
   onShowModels,
   onDownload,
+  onManualRefresh,
   onOpenPrefixProxyEditor,
   onDelete,
   onToggleStatus,
@@ -197,6 +202,9 @@ export function AuthFileTable({
             failure: normalizeUsageTotal(file.failed),
           };
           const showModelsButton = !isRuntimeOnly || providerKey === 'aistudio';
+          const showManualRefreshButton =
+            !isRuntimeOnly && supportsAuthFileManualRefresh(providerKey);
+          const isManualRefreshing = manualRefreshing[file.name] === true;
 
           return (
             <div
@@ -328,6 +336,22 @@ export function AuthFileTable({
                 )}
                 {!isRuntimeOnly && (
                   <>
+                    {showManualRefreshButton && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => onManualRefresh(file)}
+                        className={styles.iconButton}
+                        title={t('auth_files.manual_refresh_button')}
+                        disabled={disableControls || isArchived || isManualRefreshing}
+                      >
+                        {isManualRefreshing ? (
+                          <LoadingSpinner size={14} />
+                        ) : (
+                          <IconRefreshCw size={15} />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"

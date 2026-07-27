@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObj
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import { apiClient } from '@/services/api/client';
+import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import { formatFileSize } from '@/utils/format';
@@ -14,6 +15,7 @@ import {
   isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
+  supportsAuthFileManualRefresh,
 } from '@/features/authFiles/constants';
 import type {
   AuthFilesArchiveFilter,
@@ -45,6 +47,7 @@ export type UseAuthFilesDataResult = {
   deleting: string | null;
   deletingAll: boolean;
   statusUpdating: Record<string, boolean>;
+  manualRefreshing: Record<string, boolean>;
   batchStatusUpdating: boolean;
   archiveUpdating: Record<string, boolean>;
   batchArchiveUpdating: boolean;
@@ -55,6 +58,7 @@ export type UseAuthFilesDataResult = {
   handleDelete: (name: string) => void;
   handleDeleteAll: (options: DeleteAllOptions) => void;
   handleDownload: (name: string) => Promise<void>;
+  handleManualRefresh: (item: AuthFileItem) => Promise<void>;
   handleStatusToggle: (item: AuthFileItem, enabled: boolean) => Promise<void>;
   handleArchiveToggle: (item: AuthFileItem, archived: boolean) => Promise<void>;
   toggleSelect: (name: string) => void;
@@ -79,12 +83,14 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deletingAll, setDeletingAll] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
+  const [manualRefreshing, setManualRefreshing] = useState<Record<string, boolean>>({});
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [archiveUpdating, setArchiveUpdating] = useState<Record<string, boolean>>({});
   const [batchArchiveUpdating, setBatchArchiveUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const manualRefreshPendingRef = useRef<Set<string>>(new Set());
   const batchStatusPendingRef = useRef(false);
   const batchArchivePendingRef = useRef(false);
   const selectionCount = selectedFiles.size;
@@ -259,6 +265,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
             `${t('auth_files.upload_success')}${suffix}`,
             result.failed.length ? 'warning' : 'success'
           );
+          notifyAuthFilesChanged();
           await loadFiles();
         }
 
@@ -290,6 +297,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
             const result = await authFilesApi.deleteFile(name);
             showNotification(t('auth_files.delete_success'), 'success');
             applyDeletedFiles(result.files.length > 0 ? result.files : [name]);
+            if (result.deleted > 0) notifyAuthFilesChanged();
           } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : '';
             showNotification(`${t('notification.delete_failed')}: ${errorMessage}`, 'error');
@@ -357,6 +365,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
               showNotification(t('auth_files.delete_all_success'), 'success');
               setFiles((prev) => prev.filter((file) => isRuntimeOnlyAuthFile(file)));
               deselectAll();
+              notifyAuthFilesChanged();
             } else {
               const filesToDelete = files.filter((file) => {
                 if (isRuntimeOnlyAuthFile(file)) return false;
@@ -399,6 +408,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
               const failed = result.failed.length;
 
               applyDeletedFiles(result.files);
+              if (result.deleted > 0) notifyAuthFilesChanged();
 
               if (failed === 0 && hasResultFilter) {
                 showNotification(
@@ -487,6 +497,43 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : '';
         showNotification(`${t('notification.download_failed')}: ${errorMessage}`, 'error');
+      }
+    },
+    [showNotification, t]
+  );
+
+  const handleManualRefresh = useCallback(
+    async (item: AuthFileItem) => {
+      const name = item.name.trim();
+      const provider = item.type ?? item.provider;
+      if (
+        !name ||
+        item.disabled === true ||
+        isRuntimeOnlyAuthFile(item) ||
+        !supportsAuthFileManualRefresh(provider) ||
+        manualRefreshPendingRef.current.has(name)
+      ) {
+        return;
+      }
+
+      manualRefreshPendingRef.current.add(name);
+      setManualRefreshing((prev) => ({ ...prev, [name]: true }));
+
+      try {
+        await authFilesApi.requestManualRefresh(name);
+        showNotification(t('auth_files.manual_refresh_requested', { name }), 'info');
+        notifyAuthFilesChanged();
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : t('notification.update_failed');
+        showNotification(t('auth_files.manual_refresh_failed', { name, message }), 'error');
+      } finally {
+        manualRefreshPendingRef.current.delete(name);
+        setManualRefreshing((prev) => {
+          if (!prev[name]) return prev;
+          const next = { ...prev };
+          delete next[name];
+          return next;
+        });
       }
     },
     [showNotification, t]
@@ -813,6 +860,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
           try {
             const result = await authFilesApi.deleteFiles(uniqueNames);
             applyDeletedFiles(result.files);
+            if (result.deleted > 0) notifyAuthFilesChanged();
 
             if (result.failed.length === 0) {
               showNotification(
@@ -849,6 +897,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     deleting,
     deletingAll,
     statusUpdating,
+    manualRefreshing,
     batchStatusUpdating,
     archiveUpdating,
     batchArchiveUpdating,
@@ -859,6 +908,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     handleDelete,
     handleDeleteAll,
     handleDownload,
+    handleManualRefresh,
     handleStatusToggle,
     handleArchiveToggle,
     toggleSelect,
