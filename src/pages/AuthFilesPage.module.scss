@@ -605,7 +605,7 @@
 }
 
 .authTable {
-  min-width: 1060px;
+  min-width: 1140px;
 }
 
 .authTableHeader,
@@ -614,7 +614,7 @@
   grid-template-columns:
     32px
     minmax(220px, 1.45fr)
-    minmax(120px, 0.62fr)
+    minmax(190px, 0.86fr)
     minmax(160px, 0.82fr)
     minmax(120px, 0.62fr)
     minmax(110px, 0.52fr)
@@ -680,7 +680,6 @@
   .authCredentialCell,
   .authStatusCell,
   .authActivityCell,
-  .authInspectionCell,
   .authMetaCell {
     opacity: 0.72;
   }
@@ -691,7 +690,6 @@
 
   .authCredentialCell,
   .authActivityCell,
-  .authInspectionCell,
   .authMetaCell {
     opacity: 0.68;
   }
@@ -911,6 +909,12 @@
   color: var(--warning-text);
 }
 
+.inspectionReview {
+  border-color: color-mix(in srgb, var(--warning-text) 34%, transparent);
+  background: color-mix(in srgb, var(--warning-bg) 54%, transparent);
+  color: var(--warning-text);
+}
+
 .inspectionDisabled,
 .inspectionError {
   border-color: color-mix(in srgb, var(--danger-color) 36%, transparent);
@@ -922,6 +926,23 @@
   color: var(--text-tertiary);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+.inspectionMessage {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.inspectionActionButton {
+  min-height: 24px;
+  padding-inline: 8px;
+  font-size: 10px;
 }
 
 .authMetaCell {

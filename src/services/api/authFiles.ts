@@ -403,11 +403,19 @@ export const buildManualRefreshExpiredAt = (nowMs = Date.now()): string =>
 export const authFilesApi = {
   list: async () => dedupeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
 
-  setStatus: (name: string, disabled: boolean) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, disabled }),
+  setStatus: (name: string, disabled: boolean, authIndex?: string) =>
+    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
+      name,
+      disabled,
+      auth_index: authIndex,
+    }),
 
-  setArchived: (name: string, archived: boolean) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', { name, archived }),
+  setArchived: (name: string, archived: boolean, authIndex?: string) =>
+    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
+      name,
+      archived,
+      auth_index: authIndex,
+    }),
 
   refreshCredential: (name: string) =>
     apiClient.post<AuthFileRefreshResponse>('/auth-files/refresh', { name }),

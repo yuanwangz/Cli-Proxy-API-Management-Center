@@ -20,44 +20,27 @@ import {
   isRuntimeOnlyAuthFile,
   resolveAuthProvider,
 } from '@/utils/quota';
-import { probeXaiCredential } from '@/utils/xaiInspection';
+import {
+  classifyInspectionFailure,
+  classifySuccessfulInspection,
+  type CredentialInspectionResult,
+  type CredentialInspectionScope,
+  type CredentialInspectionSummary,
+  type InspectionOutcome,
+} from '@/features/authFiles/credentialInspection';
 
-export type CredentialInspectionStatus =
-  | 'checking'
-  | 'healthy'
-  | 'limited'
-  | 'disabled'
-  | 'unsupported'
-  | 'error';
-
-export type CredentialInspectionScope = 'row' | 'page' | 'filtered' | 'selected' | 'auto';
-
-export type CredentialInspectionResult = {
-  name: string;
-  provider: string;
-  status: CredentialInspectionStatus;
-  message: string;
-  checkedAt: string;
-  checkedAtMs: number;
-  durationMs?: number;
-  statusCode?: number;
-  scope?: CredentialInspectionScope;
-};
-
-export type CredentialInspectionSummary = {
-  total: number;
-  checking: number;
-  healthy: number;
-  limited: number;
-  disabled: number;
-  unsupported: number;
-  error: number;
-};
+export type {
+  CredentialInspectionAction,
+  CredentialInspectionResult,
+  CredentialInspectionScope,
+  CredentialInspectionStatus,
+  CredentialInspectionSummary,
+} from '@/features/authFiles/credentialInspection';
 
 type InspectableQuotaConfig = {
   type: string;
   fetchQuota: (file: AuthFileItem, t: TFunction) => Promise<unknown>;
-  buildSuccessState: (data: unknown) => QuotaStatusState;
+  buildSuccessState: (data: unknown) => QuotaStatusState & Record<string, unknown>;
 };
 
 type InspectionTarget = {
@@ -86,7 +69,8 @@ const emptySummary = (): CredentialInspectionSummary => ({
   checking: 0,
   healthy: 0,
   limited: 0,
-  disabled: 0,
+  reauth: 0,
+  review: 0,
   unsupported: 0,
   error: 0,
 });
@@ -115,9 +99,7 @@ const uniqueFilesByName = (files: AuthFileItem[]): AuthFileItem[] => {
 };
 
 export const isCredentialInspectionSupported = (file: AuthFileItem): boolean => {
-  if (isRuntimeOnlyAuthFile(file) || isArchivedAuthFile(file) || isDisabledAuthFile(file)) {
-    return false;
-  }
+  if (isRuntimeOnlyAuthFile(file)) return false;
   const provider = resolveAuthProvider(file);
   return QUOTA_CONFIG_BY_PROVIDER.has(provider);
 };
@@ -125,11 +107,7 @@ export const isCredentialInspectionSupported = (file: AuthFileItem): boolean => 
 const inspectViaQuota = async (
   target: InspectionTarget,
   t: TFunction
-): Promise<{
-  status: CredentialInspectionStatus;
-  message: string;
-  statusCode?: number;
-}> => {
+): Promise<InspectionOutcome> => {
   try {
     const data = await target.config.fetchQuota(target.file, t);
     const checkedAt = new Date().toISOString();
@@ -149,71 +127,12 @@ const inspectViaQuota = async (
       })
       .catch(() => {});
 
-    return {
-      status: 'healthy',
-      message: t('auth_files.inspection_healthy'),
-    };
+    return classifySuccessfulInspection(target.config.type, state, target.file, t);
   } catch (err: unknown) {
     const statusCode = getStatusFromError(err);
     const message = err instanceof Error ? err.message : t('common.unknown_error');
-    const status: CredentialInspectionStatus =
-      statusCode === 401 ? 'disabled' : statusCode === 429 ? 'limited' : 'error';
-
-    return {
-      status,
-      message:
-        statusCode === 401
-          ? t('auth_files.inspection_unauthorized_disabled')
-          : statusCode === 429
-            ? t('auth_files.inspection_rate_limited')
-            : message,
-      statusCode,
-    };
+    return classifyInspectionFailure(target.config.type, target.file, statusCode, message, t);
   }
-};
-
-const inspectXaiCredential = async (
-  target: InspectionTarget,
-  t: TFunction
-): Promise<{
-  status: CredentialInspectionStatus;
-  message: string;
-  statusCode?: number;
-}> => {
-  const outcome = await probeXaiCredential(target.file, target.authIndex);
-  const message = t(`auth_files.${outcome.reasonKey}`, {
-    defaultValue: outcome.reasonFallback,
-  });
-
-  // Best-effort billing snapshot when chat is healthy so quota page still gets data.
-  if (outcome.uiStatus === 'healthy') {
-    try {
-      const data = await target.config.fetchQuota(target.file, t);
-      const checkedAt = new Date().toISOString();
-      const state = {
-        ...target.config.buildSuccessState(data),
-        refreshedAt: checkedAt,
-        refreshedAtMs: Date.now(),
-      };
-      await quotaApi
-        .saveSnapshot({
-          provider: target.config.type,
-          authId: typeof target.file.id === 'string' ? target.file.id : undefined,
-          authIndex: target.authIndex,
-          fileName: target.file.name,
-          quota: state,
-        })
-        .catch(() => {});
-    } catch {
-      // Chat healthy is authoritative; billing failure must not flip status.
-    }
-  }
-
-  return {
-    status: outcome.uiStatus,
-    message,
-    statusCode: outcome.httpStatus,
-  };
 };
 
 export function useCredentialInspection() {
@@ -275,33 +194,24 @@ export function useCredentialInspection() {
       uniqueFiles.forEach((file) => {
         const name = String(file.name ?? '').trim();
         const provider = resolveAuthProvider(file);
-        const base = { name, provider, checkedAt: nowIso, checkedAtMs: nowMs, scope };
+        const base = {
+          name,
+          provider,
+          checkedAt: nowIso,
+          checkedAtMs: nowMs,
+          scope,
+          action: 'none' as const,
+          actionReason: t('auth_files.inspection_action_reason_none'),
+          evidence: [] as string[],
+          currentDisabled: isDisabledAuthFile(file),
+          currentArchived: isArchivedAuthFile(file),
+        };
 
         if (isRuntimeOnlyAuthFile(file)) {
           pushResult({
             ...base,
             status: 'unsupported',
             message: t('auth_files.inspection_virtual_skipped'),
-          });
-          completeOne();
-          return;
-        }
-
-        if (isArchivedAuthFile(file)) {
-          pushResult({
-            ...base,
-            status: 'unsupported',
-            message: t('auth_files.inspection_archived_skipped'),
-          });
-          completeOne();
-          return;
-        }
-
-        if (isDisabledAuthFile(file)) {
-          pushResult({
-            ...base,
-            status: 'disabled',
-            message: t('auth_files.inspection_disabled_skipped'),
           });
           completeOne();
           return;
@@ -324,6 +234,9 @@ export function useCredentialInspection() {
             ...base,
             status: 'error',
             message: t('auth_files.inspection_missing_auth_index'),
+            action: 'review',
+            actionReason: t('auth_files.inspection_action_reason_review'),
+            evidence: [t('auth_files.inspection_missing_auth_index')],
           });
           completeOne();
           return;
@@ -357,10 +270,7 @@ export function useCredentialInspection() {
             const name = target.file.name;
 
             try {
-              const outcome =
-                provider === 'xai'
-                  ? await inspectXaiCredential(target, t)
-                  : await inspectViaQuota(target, t);
+              const outcome = await inspectViaQuota(target, t);
 
               pushResult({
                 name,
@@ -372,28 +282,38 @@ export function useCredentialInspection() {
                 durationMs: Math.round(performance.now() - start),
                 statusCode: outcome.statusCode,
                 scope,
+                action: outcome.action,
+                actionReason: outcome.actionReason,
+                evidence: outcome.evidence,
+                currentDisabled: isDisabledAuthFile(target.file),
+                currentArchived: isArchivedAuthFile(target.file),
               });
             } catch (err: unknown) {
               const statusCode = getStatusFromError(err);
               const message = err instanceof Error ? err.message : t('common.unknown_error');
-              const status: CredentialInspectionStatus =
-                statusCode === 401 ? 'disabled' : statusCode === 429 ? 'limited' : 'error';
+              const outcome = classifyInspectionFailure(
+                provider,
+                target.file,
+                statusCode,
+                message,
+                t
+              );
 
               pushResult({
                 name,
                 provider,
-                status,
-                message:
-                  statusCode === 401
-                    ? t('auth_files.inspection_unauthorized_disabled')
-                    : statusCode === 429
-                      ? t('auth_files.inspection_rate_limited')
-                      : message,
+                status: outcome.status,
+                message: outcome.message,
                 checkedAt: checkedAtIso,
                 checkedAtMs,
                 durationMs: Math.round(performance.now() - start),
-                statusCode,
+                statusCode: outcome.statusCode,
                 scope,
+                action: outcome.action,
+                actionReason: outcome.actionReason,
+                evidence: outcome.evidence,
+                currentDisabled: isDisabledAuthFile(target.file),
+                currentArchived: isArchivedAuthFile(target.file),
               });
             } finally {
               completeOne();

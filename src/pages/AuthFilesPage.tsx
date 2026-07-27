@@ -45,7 +45,10 @@ import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileMod
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
 import { OAuthModelAliasCard } from '@/features/authFiles/components/OAuthModelAliasCard';
-import { useCredentialInspection } from '@/features/authFiles/hooks/useCredentialInspection';
+import {
+  useCredentialInspection,
+  type CredentialInspectionResult,
+} from '@/features/authFiles/hooks/useCredentialInspection';
 import { useAuthFilesData } from '@/features/authFiles/hooks/useAuthFilesData';
 import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModels';
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
@@ -65,7 +68,7 @@ import {
   type AuthFilesArchiveFilter,
   type AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
-import { quotaApi } from '@/services/api';
+import { authFilesApi, quotaApi } from '@/services/api';
 import { useAuthStore, useNotificationStore, useThemeStore } from '@/stores';
 import type { QuotaSnapshotRecord } from '@/types/quota';
 import {
@@ -93,6 +96,7 @@ const buildWildcardSearch = (value: string): RegExp | null => {
 export function AuthFilesPage() {
   const { t } = useTranslation();
   const showNotification = useNotificationStore((state) => state.showNotification);
+  const showConfirmation = useNotificationStore((state) => state.showConfirmation);
   const connectionStatus = useAuthStore((state) => state.connectionStatus);
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const pageTransitionLayer = usePageTransitionLayer();
@@ -117,6 +121,9 @@ export function AuthFilesPage() {
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [autoInspection, setAutoInspection] = useState(false);
   const [quotaSnapshots, setQuotaSnapshots] = useState<QuotaSnapshotRecord[]>([]);
+  const [inspectionActionRunning, setInspectionActionRunning] = useState<Record<string, boolean>>(
+    {}
+  );
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
@@ -605,9 +612,9 @@ export function AuthFilesPage() {
 
       if (silent) return;
       const variant =
-        summary.error > 0 || summary.disabled > 0
+        summary.error > 0 || summary.reauth > 0
           ? 'warning'
-          : summary.limited > 0 || summary.unsupported > 0
+          : summary.limited > 0 || summary.review > 0 || summary.unsupported > 0
             ? 'info'
             : 'success';
       showNotification(
@@ -615,7 +622,8 @@ export function AuthFilesPage() {
           total: summary.total,
           healthy: summary.healthy,
           limited: summary.limited,
-          disabled: summary.disabled,
+          reauth: summary.reauth,
+          review: summary.review,
           error: summary.error,
           unsupported: summary.unsupported,
         }),
@@ -633,6 +641,94 @@ export function AuthFilesPage() {
       }
     },
     [inspectTargets, pageItems]
+  );
+
+  const handleInspectionAction = useCallback(
+    (file: (typeof files)[number], result: CredentialInspectionResult) => {
+      if (disableControls || inspectionActionRunning[file.name]) return;
+
+      if (result.action === 'reauth') {
+        navigate('/oauth');
+        return;
+      }
+      if (result.action === 'review') {
+        void openPrefixProxyEditor(file);
+        return;
+      }
+      if (result.action === 'delete') {
+        handleDelete(file.name);
+        return;
+      }
+      if (
+        result.action !== 'enable' &&
+        result.action !== 'disable' &&
+        result.action !== 'unarchive' &&
+        result.action !== 'restore'
+      ) {
+        return;
+      }
+
+      showConfirmation({
+        title: t(`auth_files.inspection_action_${result.action}`),
+        message: t('auth_files.inspection_action_confirm', {
+          name: file.name,
+          action: t(`auth_files.inspection_action_${result.action}`),
+        }),
+        onConfirm: async () => {
+          const authIndex = resolveCredentialAuthIndex(file) || undefined;
+          setInspectionActionRunning((current) => ({ ...current, [file.name]: true }));
+          let nextFile = { ...file };
+          try {
+            if (result.action === 'unarchive' || result.action === 'restore') {
+              await authFilesApi.setArchived(file.name, false, authIndex);
+              nextFile = { ...nextFile, archived: false };
+            }
+            if (result.action === 'enable' || result.action === 'restore') {
+              await authFilesApi.setStatus(file.name, false, authIndex);
+              nextFile = { ...nextFile, disabled: false };
+            } else if (result.action === 'disable') {
+              await authFilesApi.setStatus(file.name, true, authIndex);
+              nextFile = { ...nextFile, disabled: true };
+            }
+
+            showNotification(
+              t('auth_files.inspection_action_success', {
+                name: file.name,
+                action: t(`auth_files.inspection_action_${result.action}`),
+              }),
+              'success'
+            );
+            await runInspection([nextFile], 'row');
+            await loadFiles();
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : t('common.unknown_error');
+            showNotification(
+              t('auth_files.inspection_action_failed', { name: file.name, message }),
+              'error'
+            );
+            await loadFiles();
+          } finally {
+            setInspectionActionRunning((current) => {
+              const next = { ...current };
+              delete next[file.name];
+              return next;
+            });
+          }
+        },
+      });
+    },
+    [
+      disableControls,
+      handleDelete,
+      inspectionActionRunning,
+      loadFiles,
+      navigate,
+      openPrefixProxyEditor,
+      runInspection,
+      showConfirmation,
+      showNotification,
+      t,
+    ]
   );
 
   useInterval(
@@ -1065,8 +1161,12 @@ export function AuthFilesPage() {
                     <strong>{inspectionSummary.limited}</strong>
                   </span>
                   <span className={styles.inspectionSummaryItem}>
-                    {t('auth_files.inspection_status_disabled')}
-                    <strong>{inspectionSummary.disabled}</strong>
+                    {t('auth_files.inspection_status_reauth')}
+                    <strong>{inspectionSummary.reauth}</strong>
+                  </span>
+                  <span className={styles.inspectionSummaryItem}>
+                    {t('auth_files.inspection_status_review')}
+                    <strong>{inspectionSummary.review}</strong>
                   </span>
                   <span className={styles.inspectionSummaryItem}>
                     {t('auth_files.inspection_status_error')}
@@ -1157,6 +1257,7 @@ export function AuthFilesPage() {
                 statusBarCache={statusBarCache}
                 inspectionResults={inspectionResults}
                 inspectionRunning={inspectionRunning}
+                inspectionActionRunning={inspectionActionRunning}
                 onShowModels={showModels}
                 onDownload={handleDownload}
                 onManualRefresh={(file) => void handleManualRefresh(file)}
@@ -1168,6 +1269,7 @@ export function AuthFilesPage() {
                 onSelectPage={selectAllVisible}
                 onDeselectPage={deselectVisible}
                 onInspectOne={(file) => void inspectTargets([file], 'row')}
+                onInspectionAction={handleInspectionAction}
               />
             )}
 

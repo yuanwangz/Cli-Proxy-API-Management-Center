@@ -56,6 +56,7 @@ export type AuthFileTableProps = {
   statusBarCache: Map<string, AuthFileStatusBarData>;
   inspectionResults: Record<string, CredentialInspectionResult>;
   inspectionRunning: boolean;
+  inspectionActionRunning: Record<string, boolean>;
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
   onManualRefresh: (file: AuthFileItem) => void;
@@ -67,6 +68,7 @@ export type AuthFileTableProps = {
   onSelectPage: (files: AuthFileItem[]) => void;
   onDeselectPage: (files: AuthFileItem[]) => void;
   onInspectOne: (file: AuthFileItem) => void;
+  onInspectionAction: (file: AuthFileItem, result: CredentialInspectionResult) => void;
 };
 
 const inspectionClassName = (result?: CredentialInspectionResult) => {
@@ -76,8 +78,10 @@ const inspectionClassName = (result?: CredentialInspectionResult) => {
       return styles.inspectionHealthy;
     case 'limited':
       return styles.inspectionLimited;
-    case 'disabled':
+    case 'reauth':
       return styles.inspectionDisabled;
+    case 'review':
+      return styles.inspectionReview;
     case 'unsupported':
       return styles.inspectionUnsupported;
     case 'error':
@@ -106,6 +110,7 @@ export function AuthFileTable({
   statusBarCache,
   inspectionResults,
   inspectionRunning,
+  inspectionActionRunning,
   onShowModels,
   onDownload,
   onManualRefresh,
@@ -117,6 +122,7 @@ export function AuthFileTable({
   onSelectPage,
   onDeselectPage,
   onInspectOne,
+  onInspectionAction,
 }: AuthFileTableProps) {
   const { t } = useTranslation();
   const selectableFiles = useMemo(
@@ -197,6 +203,11 @@ export function AuthFileTable({
                   ? styles.stateBadgeWarning
                   : styles.stateBadgeActive;
           const inspection = inspectionResults[file.name];
+          const inspectionTitle = inspection
+            ? [inspection.message, inspection.actionReason, ...inspection.evidence]
+                .filter(Boolean)
+                .join('\n')
+            : undefined;
           const fileStats = {
             success: normalizeUsageTotal(file.success),
             failure: normalizeUsageTotal(file.failed),
@@ -298,7 +309,7 @@ export function AuthFileTable({
               <div className={styles.authInspectionCell}>
                 <div
                   className={`${styles.inspectionBadge} ${inspectionClassName(inspection)}`}
-                  title={inspection?.message}
+                  title={inspectionTitle}
                 >
                   {inspection?.status === 'checking' ? <LoadingSpinner size={12} /> : null}
                   <span>{t(inspectionLabelKey(inspection))}</span>
@@ -308,6 +319,28 @@ export function AuthFileTable({
                   <span className={styles.inspectionTime}>
                     {new Date(inspection.checkedAtMs).toLocaleTimeString()}
                   </span>
+                ) : null}
+                {inspection && inspection.status !== 'checking' ? (
+                  <span className={styles.inspectionMessage} title={inspectionTitle}>
+                    {inspection.message}
+                  </span>
+                ) : null}
+                {inspection && inspection.action !== 'none' ? (
+                  <Button
+                    variant={inspection.action === 'delete' ? 'danger' : 'secondary'}
+                    size="sm"
+                    className={styles.inspectionActionButton}
+                    onClick={() => onInspectionAction(file, inspection)}
+                    disabled={
+                      disableControls ||
+                      inspectionRunning ||
+                      inspectionActionRunning[file.name] === true
+                    }
+                    loading={inspectionActionRunning[file.name] === true}
+                    title={inspection.actionReason}
+                  >
+                    {t(`auth_files.inspection_action_${inspection.action}`)}
+                  </Button>
                 ) : null}
               </div>
 
@@ -358,7 +391,7 @@ export function AuthFileTable({
                       onClick={() => onInspectOne(file)}
                       className={styles.iconButton}
                       title={t('auth_files.inspection_single_button')}
-                      disabled={disableControls || inspectionRunning || isArchived}
+                      disabled={disableControls || inspectionRunning}
                     >
                       <IconRefreshCw size={15} />
                     </Button>
