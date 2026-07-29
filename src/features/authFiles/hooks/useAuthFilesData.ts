@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
+import type { AuthFileFieldsPatch } from '@/services/api';
 import { apiClient } from '@/services/api/client';
 import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 import { useNotificationStore } from '@/stores';
@@ -37,6 +38,13 @@ type DeleteAllOptions = {
   onResetEnabledOnly: () => void;
 };
 
+export type BatchPatchFieldsResult = {
+  success: number;
+  failedNames: string[];
+};
+
+const BATCH_FIELD_UPDATE_CONCURRENCY = 8;
+
 export type UseAuthFilesDataResult = {
   files: AuthFileItem[];
   selectedFiles: Set<string>;
@@ -51,6 +59,7 @@ export type UseAuthFilesDataResult = {
   batchStatusUpdating: boolean;
   archiveUpdating: Record<string, boolean>;
   batchArchiveUpdating: boolean;
+  batchFieldsUpdating: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   loadFiles: () => Promise<void>;
   handleUploadClick: () => void;
@@ -69,6 +78,10 @@ export type UseAuthFilesDataResult = {
   batchDownload: (names: string[]) => Promise<void>;
   batchSetStatus: (names: string[], enabled: boolean) => Promise<void>;
   batchSetArchived: (names: string[], archived: boolean) => Promise<void>;
+  batchPatchFields: (
+    names: string[],
+    fields: AuthFileFieldsPatch
+  ) => Promise<BatchPatchFieldsResult | null>;
   batchDelete: (names: string[]) => void;
 };
 
@@ -87,12 +100,14 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [archiveUpdating, setArchiveUpdating] = useState<Record<string, boolean>>({});
   const [batchArchiveUpdating, setBatchArchiveUpdating] = useState(false);
+  const [batchFieldsUpdating, setBatchFieldsUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const manualRefreshPendingRef = useRef<Set<string>>(new Set());
   const batchStatusPendingRef = useRef(false);
   const batchArchivePendingRef = useRef(false);
+  const batchFieldsPendingRef = useRef(false);
   const selectionCount = selectedFiles.size;
   const toggleSelect = useCallback((name: string) => {
     setSelectedFiles((prev) => {
@@ -332,7 +347,8 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
       const isDisabledOnly = disabledOnly === true;
       const isStatusCodeFiltered = statusCodeFilter !== 'all';
       const isEnabledOnly = enabledOnly === true;
-      const hasResultFilter = isArchiveFiltered || isDisabledOnly || isEnabledOnly || isStatusCodeFiltered;
+      const hasResultFilter =
+        isArchiveFiltered || isDisabledOnly || isEnabledOnly || isStatusCodeFiltered;
       const typeLabel = isFiltered ? getTypeLabel(t, filter) : t('auth_files.filter_all');
       let confirmMessage = t('auth_files.delete_all_confirm');
       if (hasResultFilter) {
@@ -846,6 +862,71 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     [showNotification, t]
   );
 
+  const batchPatchFields = useCallback(
+    async (
+      names: string[],
+      fields: AuthFileFieldsPatch
+    ): Promise<BatchPatchFieldsResult | null> => {
+      if (batchFieldsPendingRef.current || Object.keys(fields).length === 0) return null;
+
+      const requestedNames = new Set(names.map((name) => name.trim()).filter(Boolean));
+      const targetNames = files
+        .filter((file) => requestedNames.has(file.name) && !isRuntimeOnlyAuthFile(file))
+        .map((file) => file.name);
+      if (targetNames.length === 0) return null;
+
+      batchFieldsPendingRef.current = true;
+      setBatchFieldsUpdating(true);
+
+      try {
+        const succeeded = new Array<boolean>(targetNames.length).fill(false);
+        let nextIndex = 0;
+        const workerCount = Math.min(BATCH_FIELD_UPDATE_CONCURRENCY, targetNames.length);
+        const workers = Array.from({ length: workerCount }, async () => {
+          while (nextIndex < targetNames.length) {
+            const index = nextIndex;
+            nextIndex += 1;
+            try {
+              await authFilesApi.patchFields(targetNames[index], fields);
+              succeeded[index] = true;
+            } catch {
+              succeeded[index] = false;
+            }
+          }
+        });
+        await Promise.all(workers);
+
+        const failedNames = targetNames.filter((_, index) => !succeeded[index]);
+        const success = targetNames.length - failedNames.length;
+
+        if (success > 0) {
+          notifyAuthFilesChanged();
+          await loadFiles();
+        }
+
+        if (failedNames.length === 0) {
+          showNotification(t('auth_files.batch_edit_success', { count: success }), 'success');
+          deselectAll();
+        } else {
+          showNotification(
+            t('auth_files.batch_edit_partial', {
+              success,
+              failed: failedNames.length,
+            }),
+            'warning'
+          );
+          setSelectedFiles(new Set(failedNames));
+        }
+
+        return { success, failedNames };
+      } finally {
+        batchFieldsPendingRef.current = false;
+        setBatchFieldsUpdating(false);
+      }
+    },
+    [deselectAll, files, loadFiles, showNotification, t]
+  );
+
   const batchDelete = useCallback(
     (names: string[]) => {
       const uniqueNames = Array.from(new Set(names));
@@ -901,6 +982,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     batchStatusUpdating,
     archiveUpdating,
     batchArchiveUpdating,
+    batchFieldsUpdating,
     fileInputRef,
     loadFiles,
     handleUploadClick,
@@ -919,6 +1001,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     batchDownload,
     batchSetStatus,
     batchSetArchived,
+    batchPatchFields,
     batchDelete,
   };
 }

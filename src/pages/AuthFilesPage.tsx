@@ -33,14 +33,13 @@ import {
   getAuthFileStatusCode,
   getTypeColor,
   getTypeLabel,
-  hasAuthFileStatusMessage,
-  isArchivedAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
   parsePriorityValue,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
 import { AuthFileTable } from '@/features/authFiles/components/AuthFileTable';
+import { AuthFilesBatchEditorModal } from '@/features/authFiles/components/AuthFilesBatchEditorModal';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
 import { AuthFilesPrefixProxyEditorModal } from '@/features/authFiles/components/AuthFilesPrefixProxyEditorModal';
 import { OAuthExcludedCard } from '@/features/authFiles/components/OAuthExcludedCard';
@@ -54,6 +53,7 @@ import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModel
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
+import { buildAuthFilesFilterPipeline } from '@/features/authFiles/filtering';
 import {
   isAuthFilesSortMode,
   isAuthFilesArchiveFilter,
@@ -125,6 +125,7 @@ export function AuthFilesPage() {
     {}
   );
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
+  const [batchEditorOpen, setBatchEditorOpen] = useState(false);
   const [uiStateHydrated, setUiStateHydrated] = useState(false);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
@@ -145,6 +146,7 @@ export function AuthFilesPage() {
     batchStatusUpdating,
     archiveUpdating,
     batchArchiveUpdating,
+    batchFieldsUpdating,
     fileInputRef,
     loadFiles,
     handleUploadClick,
@@ -163,6 +165,7 @@ export function AuthFilesPage() {
     batchDownload,
     batchSetStatus,
     batchSetArchived,
+    batchPatchFields,
     batchDelete,
   } = useAuthFilesData();
 
@@ -423,68 +426,35 @@ export function AuthFilesPage() {
     [quotaAvailabilityByAuthIndex]
   );
 
-  const existingTypes = useMemo(() => {
-    const types = new Set<string>(['all']);
-    files.forEach((file) => {
-      const type = normalizeProviderKey(String(file.type ?? file.provider ?? ''));
-      if (type) types.add(type);
-    });
-    return Array.from(types);
-  }, [files]);
-
-  const filesMatchingResultFilters = useMemo(
+  const {
+    existingTypes,
+    typeCounts,
+    archiveFilterCounts,
+    statusCodeCounts,
+    filesMatchingStatusFilters,
+  } = useMemo(
     () =>
-      files.filter((file) => {
-        if (enabledOnly && file.disabled === true) return false;
-        if (disabledOnly && file.disabled !== true) return false;
-        if (problemOnly && !hasAuthFileStatusMessage(file)) return false;
-        return true;
+      buildAuthFilesFilterPipeline({
+        files,
+        providerFilter: normalizedFilter,
+        archiveFilter,
+        statusCodeFilter,
+        problemOnly,
+        disabledOnly,
+        enabledOnly,
+        getStatusCode: getQuotaAwareStatusCode,
       }),
-    [disabledOnly, enabledOnly, files, problemOnly]
+    [
+      archiveFilter,
+      disabledOnly,
+      enabledOnly,
+      files,
+      getQuotaAwareStatusCode,
+      normalizedFilter,
+      problemOnly,
+      statusCodeFilter,
+    ]
   );
-
-  const archiveFilterCounts = useMemo(() => {
-    const archived = filesMatchingResultFilters.filter(isArchivedAuthFile).length;
-    return {
-      active: filesMatchingResultFilters.length - archived,
-      archived,
-      all: filesMatchingResultFilters.length,
-    } satisfies Record<AuthFilesArchiveFilter, number>;
-  }, [filesMatchingResultFilters]);
-
-  const filesMatchingBaseStatusFilters = useMemo(
-    () =>
-      filesMatchingResultFilters.filter((file) => {
-        if (archiveFilter === 'active') return !isArchivedAuthFile(file);
-        if (archiveFilter === 'archived') return isArchivedAuthFile(file);
-        return true;
-      }),
-    [archiveFilter, filesMatchingResultFilters]
-  );
-
-  const statusCodeCounts = useMemo(() => {
-    const counts: Record<AuthFilesStatusCodeFilter, number> = {
-      all: filesMatchingBaseStatusFilters.length,
-      '401': 0,
-      '403': 0,
-      '429': 0,
-    };
-    filesMatchingBaseStatusFilters.forEach((file) => {
-      const code = getQuotaAwareStatusCode(file);
-      if (code === 401) counts['401'] += 1;
-      if (code === 403) counts['403'] += 1;
-      if (code === 429) counts['429'] += 1;
-    });
-    return counts;
-  }, [filesMatchingBaseStatusFilters, getQuotaAwareStatusCode]);
-
-  const filesMatchingStatusFilters = useMemo(() => {
-    if (statusCodeFilter === 'all') return filesMatchingBaseStatusFilters;
-    const targetCode = Number(statusCodeFilter);
-    return filesMatchingBaseStatusFilters.filter(
-      (file) => getQuotaAwareStatusCode(file) === targetCode
-    );
-  }, [filesMatchingBaseStatusFilters, getQuotaAwareStatusCode, statusCodeFilter]);
 
   const sortOptions = useMemo(
     () => [
@@ -495,16 +465,6 @@ export function AuthFilesPage() {
     [t]
   );
 
-  const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: filesMatchingStatusFilters.length };
-    filesMatchingStatusFilters.forEach((file) => {
-      const type = normalizeProviderKey(String(file.type ?? file.provider ?? ''));
-      if (!type) return;
-      counts[type] = (counts[type] || 0) + 1;
-    });
-    return counts;
-  }, [filesMatchingStatusFilters]);
-
   const normalizedSearch = search.trim();
   const wildcardSearch = useMemo(() => buildWildcardSearch(normalizedSearch), [normalizedSearch]);
 
@@ -512,8 +472,6 @@ export function AuthFilesPage() {
     const normalizedTerm = normalizedSearch.toLowerCase();
 
     return filesMatchingStatusFilters.filter((item) => {
-      const type = normalizeProviderKey(String(item.type ?? item.provider ?? ''));
-      const matchType = normalizedFilter === 'all' || type === normalizedFilter;
       const matchSearch =
         !normalizedSearch ||
         [item.name, item.type, item.provider].some((value) => {
@@ -522,9 +480,9 @@ export function AuthFilesPage() {
             ? wildcardSearch.test(content)
             : content.toLowerCase().includes(normalizedTerm);
         });
-      return matchType && matchSearch;
+      return matchSearch;
     });
-  }, [filesMatchingStatusFilters, normalizedFilter, normalizedSearch, wildcardSearch]);
+  }, [filesMatchingStatusFilters, normalizedSearch, wildcardSearch]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -573,18 +531,50 @@ export function AuthFilesPage() {
     disableControls ||
     selectedNames.length === 0 ||
     batchStatusUpdating ||
+    batchFieldsUpdating ||
     selectedHasStatusUpdating ||
     selectedHasArchiveUpdating;
   const batchArchiveButtonsDisabled =
     disableControls ||
     selectedNames.length === 0 ||
     batchArchiveUpdating ||
+    batchFieldsUpdating ||
     selectedHasArchiveUpdating;
   const selectedItems = useMemo(() => {
     if (selectedNames.length === 0) return [];
     const selectedNameSet = new Set(selectedNames);
     return files.filter((file) => selectedNameSet.has(file.name));
   }, [files, selectedNames]);
+  const batchEditButtonDisabled =
+    disableControls ||
+    selectedItems.length === 0 ||
+    batchFieldsUpdating ||
+    batchStatusUpdating ||
+    batchArchiveUpdating ||
+    selectedHasStatusUpdating ||
+    selectedHasArchiveUpdating;
+
+  const handleBatchEditSubmit = useCallback(
+    (patch: Parameters<typeof batchPatchFields>[1], fieldCount: number) => {
+      const targetNames = [...selectedNames];
+      showConfirmation({
+        title: t('auth_files.batch_edit_confirm_title'),
+        message: t('auth_files.batch_edit_confirm', {
+          count: targetNames.length,
+          fields: fieldCount,
+        }),
+        variant: 'primary',
+        confirmText: t('common.confirm'),
+        onConfirm: async () => {
+          const result = await batchPatchFields(targetNames, patch);
+          if (result && result.failedNames.length === 0) {
+            setBatchEditorOpen(false);
+          }
+        },
+      });
+    },
+    [batchPatchFields, selectedNames, showConfirmation, t]
+  );
   const inspectionBusyLabel =
     inspectionProgress.total > 0
       ? t('auth_files.inspection_progress', {
@@ -1356,6 +1346,15 @@ export function AuthFilesPage() {
         onChange={handlePrefixProxyChange}
       />
 
+      <AuthFilesBatchEditorModal
+        open={batchEditorOpen}
+        files={selectedItems}
+        saving={batchFieldsUpdating}
+        disableControls={disableControls}
+        onClose={() => setBatchEditorOpen(false)}
+        onSubmit={handleBatchEditSubmit}
+      />
+
       {batchActionBarVisible && typeof document !== 'undefined'
         ? createPortal(
             <div className={styles.batchActionContainer} ref={floatingBatchActionsRef}>
@@ -1393,6 +1392,13 @@ export function AuthFilesPage() {
                   </Button>
                 </div>
                 <div className={styles.batchActionRight}>
+                  <Button
+                    size="sm"
+                    onClick={() => setBatchEditorOpen(true)}
+                    disabled={batchEditButtonDisabled}
+                  >
+                    {t('auth_files.batch_edit_button')}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="sm"

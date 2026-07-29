@@ -1,0 +1,123 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--border-color));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-secondary));
+
+  strong {
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  span {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.72fr) minmax(260px, 1.28fr);
+  gap: 16px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg-secondary) 66%, transparent);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease;
+}
+
+.fieldRowEnabled {
+  border-color: color-mix(in srgb, var(--primary-color) 42%, var(--border-color));
+  background: color-mix(in srgb, var(--primary-color) 5%, var(--bg-secondary));
+}
+
+.fieldOptIn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+
+  input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary-color);
+  }
+}
+
+.fieldControl {
+  min-width: 0;
+
+  :global(.form-group) {
+    margin: 0;
+  }
+}
+
+.switchControl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.headersControl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  textarea {
+    min-height: 108px;
+    resize: vertical;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+  span {
+    color: var(--text-tertiary);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+}
+
+.error {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger-color) 60%, var(--border-color));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger-color) 8%, var(--bg-primary));
+  color: var(--danger-color);
+  font-size: 12px;
+}
+
+@media (max-width: 680px) {
+  .fieldRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .fieldOptIn {
+    min-height: 28px;
+  }
+}
