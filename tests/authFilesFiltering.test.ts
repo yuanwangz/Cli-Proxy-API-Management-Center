@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { buildAuthFilesFilterPipeline } from '@/features/authFiles/filtering';
+import {
+  buildAuthFilesFilterPipeline,
+  filterAuthFilesByInspectionStatus,
+} from '@/features/authFiles/filtering';
+import type {
+  CredentialInspectionResult,
+  CredentialInspectionStatus,
+} from '@/features/authFiles/credentialInspection';
 import type { AuthFileItem } from '@/types';
 
 const files: AuthFileItem[] = [
@@ -60,5 +67,49 @@ describe('auth-files filter pipeline', () => {
     expect(result.filesMatchingStatusFilters.map((file) => file.name)).toEqual([
       'xai-disabled.json',
     ]);
+  });
+});
+
+const inspectionResult = (status: CredentialInspectionStatus): CredentialInspectionResult => ({
+  name: `${status}.json`,
+  provider: 'codex',
+  status,
+  message: status,
+  checkedAt: '2026-08-18T00:00:00.000Z',
+  checkedAtMs: 0,
+  action: 'none',
+  actionReason: '',
+  evidence: [],
+  currentDisabled: false,
+  currentArchived: false,
+});
+
+describe('auth-files inspection result filter', () => {
+  const inspectionFiles: AuthFileItem[] = [
+    { name: 'healthy.json', type: 'codex' },
+    { name: 'reauth.json', type: 'codex' },
+    { name: 'review.json', type: 'codex' },
+    { name: 'unchecked.json', type: 'codex' },
+  ];
+  const results = {
+    'healthy.json': inspectionResult('healthy'),
+    'reauth.json': inspectionResult('reauth'),
+    'review.json': inspectionResult('review'),
+  };
+
+  test('healthy filter excludes auth-invalid and unchecked credentials', () => {
+    expect(
+      filterAuthFilesByInspectionStatus(inspectionFiles, 'healthy', results).map(
+        (file) => file.name
+      )
+    ).toEqual(['healthy.json']);
+  });
+
+  test('not checked filter only returns credentials without an inspection result', () => {
+    expect(
+      filterAuthFilesByInspectionStatus(inspectionFiles, 'not_checked', results).map(
+        (file) => file.name
+      )
+    ).toEqual(['unchecked.json']);
   });
 });

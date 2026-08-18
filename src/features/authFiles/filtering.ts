@@ -1,4 +1,5 @@
 import type { AuthFileItem } from '@/types';
+import type { CredentialInspectionResult } from '@/features/authFiles/credentialInspection';
 import {
   hasAuthFileStatusMessage,
   isArchivedAuthFile,
@@ -6,8 +7,21 @@ import {
 } from '@/features/authFiles/constants';
 import type {
   AuthFilesArchiveFilter,
+  AuthFilesInspectionStatusFilter,
   AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
+
+export const filterAuthFilesByInspectionStatus = (
+  files: AuthFileItem[],
+  statusFilter: AuthFilesInspectionStatusFilter,
+  resultsByName: Readonly<Record<string, CredentialInspectionResult>>
+): AuthFileItem[] => {
+  if (statusFilter === 'all') return files;
+  if (statusFilter === 'not_checked') {
+    return files.filter((file) => !resultsByName[file.name]);
+  }
+  return files.filter((file) => resultsByName[file.name]?.status === statusFilter);
+};
 
 export type AuthFilesFilterPipelineOptions = {
   files: AuthFileItem[];

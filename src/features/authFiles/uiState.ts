@@ -1,6 +1,17 @@
 export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
 export const AUTH_FILES_STATUS_CODE_FILTERS = ['all', '401', '403', '429'] as const;
 export const AUTH_FILES_ARCHIVE_FILTERS = ['active', 'archived', 'all'] as const;
+export const AUTH_FILES_INSPECTION_STATUS_FILTERS = [
+  'all',
+  'not_checked',
+  'checking',
+  'healthy',
+  'limited',
+  'reauth',
+  'review',
+  'unsupported',
+  'error',
+] as const;
 export const AUTH_FILES_STATUS_FILTER_MODES = [
   'all',
   'enabled',
@@ -11,6 +22,8 @@ export const AUTH_FILES_STATUS_FILTER_MODES = [
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];
 export type AuthFilesStatusCodeFilter = (typeof AUTH_FILES_STATUS_CODE_FILTERS)[number];
 export type AuthFilesArchiveFilter = (typeof AUTH_FILES_ARCHIVE_FILTERS)[number];
+export type AuthFilesInspectionStatusFilter =
+  (typeof AUTH_FILES_INSPECTION_STATUS_FILTERS)[number];
 export type AuthFilesStatusFilterMode = (typeof AUTH_FILES_STATUS_FILTER_MODES)[number];
 
 export type AuthFilesUiState = {
@@ -37,6 +50,9 @@ const AUTH_FILES_STATUS_CODE_FILTER_SET = new Set<AuthFilesStatusCodeFilter>(
   AUTH_FILES_STATUS_CODE_FILTERS
 );
 const AUTH_FILES_ARCHIVE_FILTER_SET = new Set<AuthFilesArchiveFilter>(AUTH_FILES_ARCHIVE_FILTERS);
+const AUTH_FILES_INSPECTION_STATUS_FILTER_SET = new Set<AuthFilesInspectionStatusFilter>(
+  AUTH_FILES_INSPECTION_STATUS_FILTERS
+);
 const AUTH_FILES_STATUS_FILTER_MODE_SET = new Set<AuthFilesStatusFilterMode>(
   AUTH_FILES_STATUS_FILTER_MODES
 );
@@ -50,6 +66,12 @@ export const isAuthFilesStatusCodeFilter = (value: unknown): value is AuthFilesS
 
 export const isAuthFilesArchiveFilter = (value: unknown): value is AuthFilesArchiveFilter =>
   typeof value === 'string' && AUTH_FILES_ARCHIVE_FILTER_SET.has(value as AuthFilesArchiveFilter);
+
+export const isAuthFilesInspectionStatusFilter = (
+  value: unknown
+): value is AuthFilesInspectionStatusFilter =>
+  typeof value === 'string' &&
+  AUTH_FILES_INSPECTION_STATUS_FILTER_SET.has(value as AuthFilesInspectionStatusFilter);
 
 export const isAuthFilesStatusFilterMode = (value: unknown): value is AuthFilesStatusFilterMode =>
   typeof value === 'string' &&

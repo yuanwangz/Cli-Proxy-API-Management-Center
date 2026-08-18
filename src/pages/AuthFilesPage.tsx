@@ -53,12 +53,17 @@ import { useAuthFilesModels } from '@/features/authFiles/hooks/useAuthFilesModel
 import { useAuthFilesOauth } from '@/features/authFiles/hooks/useAuthFilesOauth';
 import { useAuthFilesPrefixProxyEditor } from '@/features/authFiles/hooks/useAuthFilesPrefixProxyEditor';
 import { useAuthFilesStatusBarCache } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
-import { buildAuthFilesFilterPipeline } from '@/features/authFiles/filtering';
+import {
+  buildAuthFilesFilterPipeline,
+  filterAuthFilesByInspectionStatus,
+} from '@/features/authFiles/filtering';
 import {
   isAuthFilesSortMode,
   isAuthFilesArchiveFilter,
+  isAuthFilesInspectionStatusFilter,
   isAuthFilesStatusCodeFilter,
   AUTH_FILES_ARCHIVE_FILTERS,
+  AUTH_FILES_INSPECTION_STATUS_FILTERS,
   AUTH_FILES_STATUS_CODE_FILTERS,
   readAuthFilesUiState,
   readPersistedAuthFilesCompactMode,
@@ -66,6 +71,7 @@ import {
   writePersistedAuthFilesCompactMode,
   type AuthFilesSortMode,
   type AuthFilesArchiveFilter,
+  type AuthFilesInspectionStatusFilter,
   type AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
 import { authFilesApi, quotaApi } from '@/services/api';
@@ -105,6 +111,8 @@ export function AuthFilesPage() {
 
   const [filter, setFilter] = useState<'all' | string>('all');
   const [archiveFilter, setArchiveFilter] = useState<AuthFilesArchiveFilter>('active');
+  const [inspectionStatusFilter, setInspectionStatusFilter] =
+    useState<AuthFilesInspectionStatusFilter>('all');
   const [problemOnly, setProblemOnly] = useState(false);
   const [disabledOnly, setDisabledOnly] = useState(false);
   const [enabledOnly, setEnabledOnly] = useState(false);
@@ -506,17 +514,24 @@ export function AuthFilesPage() {
     return copy;
   }, [filtered, sortMode]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const inspectionFiltered = useMemo(
+    () => filterAuthFilesByInspectionStatus(sorted, inspectionStatusFilter, inspectionResults),
+    [inspectionResults, inspectionStatusFilter, sorted]
+  );
+  const totalPages = Math.max(1, Math.ceil(inspectionFiltered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const start = (currentPage - 1) * pageSize;
-  const pageItems = useMemo(() => sorted.slice(start, start + pageSize), [pageSize, sorted, start]);
+  const pageItems = useMemo(
+    () => inspectionFiltered.slice(start, start + pageSize),
+    [inspectionFiltered, pageSize, start]
+  );
   const selectablePageItems = useMemo(
     () => pageItems.filter((file) => !isRuntimeOnlyAuthFile(file)),
     [pageItems]
   );
   const selectableFilteredItems = useMemo(
-    () => sorted.filter((file) => !isRuntimeOnlyAuthFile(file)),
-    [sorted]
+    () => inspectionFiltered.filter((file) => !isRuntimeOnlyAuthFile(file)),
+    [inspectionFiltered]
   );
   const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
   const selectedHasStatusUpdating = useMemo(
@@ -574,6 +589,24 @@ export function AuthFilesPage() {
       });
     },
     [batchPatchFields, selectedNames, showConfirmation, t]
+  );
+  const handleInspectionStatusFilterChange = useCallback((value: string) => {
+    if (!isAuthFilesInspectionStatusFilter(value)) return;
+    setInspectionStatusFilter(value);
+    setPage(1);
+  }, []);
+  const inspectionStatusOptions = useMemo(
+    () =>
+      AUTH_FILES_INSPECTION_STATUS_FILTERS.map((value) => ({
+        value,
+        label:
+          value === 'all'
+            ? t('auth_files.inspection_filter_all')
+            : value === 'not_checked'
+              ? t('auth_files.inspection_filter_not_checked')
+              : t(`auth_files.inspection_status_${value}`),
+      })),
+    [t]
   );
   const inspectionBusyLabel =
     inspectionProgress.total > 0
@@ -1023,6 +1056,17 @@ export function AuthFilesPage() {
                     fullWidth
                   />
                 </div>
+                <div className={`${styles.filterItem} ${styles.inspectionFilterItem}`}>
+                  <label>{t('auth_files.inspection_filter_label')}</label>
+                  <Select
+                    className={styles.sortSelect}
+                    value={inspectionStatusFilter}
+                    options={inspectionStatusOptions}
+                    onChange={handleInspectionStatusFilterChange}
+                    ariaLabel={t('auth_files.inspection_filter_label')}
+                    fullWidth
+                  />
+                </div>
                 <div
                   className={`${styles.filterItem} ${styles.statusCodeFilterItem} ${styles.statusCodeGroupItem}`}
                 >
@@ -1131,7 +1175,7 @@ export function AuthFilesPage() {
                   <span>
                     {t('auth_files.workbench_visible', {
                       count: pageItems.length,
-                      total: sorted.length,
+                      total: inspectionFiltered.length,
                     })}
                   </span>
                   <span>
@@ -1142,30 +1186,69 @@ export function AuthFilesPage() {
                   {inspectionRunning && <strong>{inspectionBusyLabel}</strong>}
                 </div>
                 <div className={styles.inspectionSummary}>
-                  <span className={styles.inspectionSummaryItem}>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'healthy' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'healthy'}
+                    onClick={() => handleInspectionStatusFilterChange('healthy')}
+                  >
                     {t('auth_files.inspection_status_healthy')}
                     <strong>{inspectionSummary.healthy}</strong>
-                  </span>
-                  <span className={styles.inspectionSummaryItem}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'limited' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'limited'}
+                    onClick={() => handleInspectionStatusFilterChange('limited')}
+                  >
                     {t('auth_files.inspection_status_limited')}
                     <strong>{inspectionSummary.limited}</strong>
-                  </span>
-                  <span className={styles.inspectionSummaryItem}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'reauth' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'reauth'}
+                    onClick={() => handleInspectionStatusFilterChange('reauth')}
+                  >
                     {t('auth_files.inspection_status_reauth')}
                     <strong>{inspectionSummary.reauth}</strong>
-                  </span>
-                  <span className={styles.inspectionSummaryItem}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'review' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'review'}
+                    onClick={() => handleInspectionStatusFilterChange('review')}
+                  >
                     {t('auth_files.inspection_status_review')}
                     <strong>{inspectionSummary.review}</strong>
-                  </span>
-                  <span className={styles.inspectionSummaryItem}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'error' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'error'}
+                    onClick={() => handleInspectionStatusFilterChange('error')}
+                  >
                     {t('auth_files.inspection_status_error')}
                     <strong>{inspectionSummary.error}</strong>
-                  </span>
-                  <span className={styles.inspectionSummaryItem}>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'unsupported' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'unsupported'}
+                    onClick={() => handleInspectionStatusFilterChange('unsupported')}
+                  >
                     {t('auth_files.inspection_status_unsupported')}
                     <strong>{inspectionSummary.unsupported}</strong>
-                  </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'checking' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'checking'}
+                    onClick={() => handleInspectionStatusFilterChange('checking')}
+                  >
+                    {t('auth_files.inspection_status_checking')}
+                    <strong>{inspectionSummary.checking}</strong>
+                  </button>
                 </div>
               </div>
               <div className={styles.authWorkbenchActions}>
@@ -1180,7 +1263,7 @@ export function AuthFilesPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => selectAllVisible(sorted)}
+                  onClick={() => selectAllVisible(inspectionFiltered)}
                   disabled={selectableFilteredItems.length === 0}
                 >
                   {t('auth_files.batch_select_filtered')}
@@ -1263,7 +1346,7 @@ export function AuthFilesPage() {
               />
             )}
 
-            {!loading && sorted.length > pageSize && (
+            {!loading && inspectionFiltered.length > pageSize && (
               <div className={styles.pagination}>
                 <Button
                   variant="secondary"
@@ -1277,7 +1360,7 @@ export function AuthFilesPage() {
                   {t('auth_files.pagination_info', {
                     current: currentPage,
                     total: totalPages,
-                    count: sorted.length,
+                    count: inspectionFiltered.length,
                   })}
                 </div>
                 <Button
@@ -1374,7 +1457,7 @@ export function AuthFilesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => selectAllVisible(sorted)}
+                    onClick={() => selectAllVisible(inspectionFiltered)}
                     disabled={selectableFilteredItems.length === 0}
                   >
                     {t('auth_files.batch_select_filtered')}
@@ -1434,7 +1517,7 @@ export function AuthFilesPage() {
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => batchSetStatus(selectedNames, true)}
+                    onClick={() => void batchSetStatus(selectedNames, true)}
                     disabled={batchStatusButtonsDisabled}
                   >
                     {t('auth_files.batch_enable')}
