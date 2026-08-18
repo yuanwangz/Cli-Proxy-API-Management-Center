@@ -25,17 +25,17 @@ import type {
 
 type DeleteAllOptions = {
   filter: string;
-  archiveFilter: AuthFilesArchiveFilter;
-  problemOnly: boolean;
-  disabledOnly: boolean;
-  statusCodeFilter: AuthFilesStatusCodeFilter;
-  enabledOnly: boolean;
+  archiveFilter?: AuthFilesArchiveFilter;
+  problemOnly?: boolean;
+  disabledOnly?: boolean;
+  statusCodeFilter?: AuthFilesStatusCodeFilter;
+  enabledOnly?: boolean;
   onResetFilterToAll: () => void;
-  onResetArchiveFilter: () => void;
-  onResetProblemOnly: () => void;
-  onResetDisabledOnly: () => void;
-  onResetStatusCodeFilter: () => void;
-  onResetEnabledOnly: () => void;
+  onResetArchiveFilter?: () => void;
+  onResetProblemOnly?: () => void;
+  onResetDisabledOnly?: () => void;
+  onResetStatusCodeFilter?: () => void;
+  onResetEnabledOnly?: () => void;
 };
 
 export type BatchPatchFieldsResult = {
@@ -50,6 +50,7 @@ export type UseAuthFilesDataResult = {
   selectedFiles: Set<string>;
   selectionCount: number;
   loading: boolean;
+  refreshing: boolean;
   error: string;
   uploading: boolean;
   deleting: string | null;
@@ -61,7 +62,7 @@ export type UseAuthFilesDataResult = {
   batchArchiveUpdating: boolean;
   batchFieldsUpdating: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  loadFiles: () => Promise<void>;
+  loadFiles: (options?: { background?: boolean }) => Promise<void>;
   handleUploadClick: () => void;
   handleFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleDelete: (name: string) => void;
@@ -85,12 +86,13 @@ export type UseAuthFilesDataResult = {
   batchDelete: (names: string[]) => void;
 };
 
-export function useAuthFilesData(): UseAuthFilesDataResult {
+export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]) => void }): UseAuthFilesDataResult {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
   const [files, setFiles] = useState<AuthFileItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -214,8 +216,10 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     });
   }, [files, selectedFiles.size]);
 
-  const loadFiles = useCallback(async () => {
-    setLoading(true);
+  const loadFiles = useCallback(async (options?: { background?: boolean }) => {
+    const background = options?.background === true;
+    if (background) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
       const data = await authFilesApi.list();
@@ -224,7 +228,8 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
       const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
       setError(errorMessage);
     } finally {
-      setLoading(false);
+      if (background) setRefreshing(false);
+      else setLoading(false);
     }
   }, [t]);
 
@@ -329,11 +334,11 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     (deleteAllOptions: DeleteAllOptions) => {
       const {
         filter,
-        archiveFilter,
-        problemOnly,
-        disabledOnly,
-        statusCodeFilter,
-        enabledOnly,
+        archiveFilter = 'all',
+        problemOnly = false,
+        disabledOnly = false,
+        statusCodeFilter = 'all',
+        enabledOnly = false,
         onResetFilterToAll,
         onResetArchiveFilter,
         onResetProblemOnly,
@@ -473,19 +478,19 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
                 onResetFilterToAll();
               }
               if (archiveFilter === 'archived') {
-                onResetArchiveFilter();
+                onResetArchiveFilter?.();
               }
               if (isProblemOnly) {
-                onResetProblemOnly();
+                onResetProblemOnly?.();
               }
               if (isDisabledOnly) {
-                onResetDisabledOnly();
+                onResetDisabledOnly?.();
               }
               if (isStatusCodeFiltered) {
-                onResetStatusCodeFilter();
+                onResetStatusCodeFilter?.();
               }
               if (isEnabledOnly) {
-                onResetEnabledOnly();
+                onResetEnabledOnly?.();
               }
             }
           } catch (err: unknown) {
@@ -973,6 +978,7 @@ export function useAuthFilesData(): UseAuthFilesDataResult {
     selectedFiles,
     selectionCount,
     loading,
+    refreshing,
     error,
     uploading,
     deleting,

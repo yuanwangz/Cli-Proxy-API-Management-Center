@@ -119,6 +119,8 @@ export interface CodexAdditionalRateLimit {
 export interface CodexRateLimitResetCredits {
   available_count?: number | string;
   availableCount?: number | string;
+  applicable_available_count?: number | string;
+  applicableAvailableCount?: number | string;
 }
 
 export interface CodexRateLimitResetCredit {
@@ -144,7 +146,18 @@ export interface CodexUsagePayload {
 // Claude API payload types
 export interface ClaudeUsageWindow {
   utilization: number;
-  resets_at: string;
+  resets_at: string | null;
+}
+
+export interface ClaudeUsageLimit {
+  kind?: string | null;
+  group?: string | null;
+  percent?: number | null;
+  resets_at?: string | null;
+  is_active?: boolean | null;
+  scope?: {
+    model?: { id?: string | null; display_name?: string | null } | null;
+  } | null;
 }
 
 export interface ClaudeExtraUsage {
@@ -162,6 +175,7 @@ export interface ClaudeUsagePayload {
   seven_day_sonnet?: ClaudeUsageWindow | null;
   seven_day_cowork?: ClaudeUsageWindow | null;
   iguana_necktie?: ClaudeUsageWindow | null;
+  limits?: ClaudeUsageLimit[] | null;
   extra_usage?: ClaudeExtraUsage | null;
 }
 
@@ -193,6 +207,8 @@ export interface ClaudeQuotaWindow {
   labelKey?: string;
   usedPercent: number | null;
   resetLabel: string;
+  resetAtMs?: number | null;
+  periodHours?: number | null;
 }
 
 export interface ClaudeQuotaState {
@@ -230,6 +246,8 @@ export interface AntigravityQuotaBucket {
   remainingFraction: number;
   resetTime?: string;
   description?: string;
+  resetAtMs?: number | null;
+  periodHours?: number | null;
 }
 
 export interface AntigravityQuotaState {
@@ -274,6 +292,8 @@ export interface CodexQuotaWindow {
   resetLabel: string;
   resetAt?: number;
   windowMinutes?: number;
+  resetAtMs?: number | null;
+  periodHours?: number | null;
 }
 
 export interface CodexQuotaState {
@@ -347,6 +367,8 @@ export interface KimiQuotaRow {
   used: number;
   limit: number;
   resetHint?: string;
+  resetAtMs?: number | null;
+  periodHours?: number | null;
 }
 
 export interface KimiQuotaState {
@@ -427,6 +449,8 @@ export interface XaiBillingSummary {
   billingPeriodStart?: string;
   billingPeriodEnd?: string;
   usedPercent: number | null;
+  resetAtMs?: number | null;
+  periodHours?: number | null;
 }
 
 export interface XaiQuotaState {

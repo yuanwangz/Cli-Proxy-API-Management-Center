@@ -3,9 +3,11 @@
  */
 
 import type { GeminiKeyConfig, OpenAIProviderConfig, ProviderKeyConfig } from '@/types';
+import type { ThinkingLevel } from './thinkingLevels';
 
 export type ProviderBrand =
   | 'gemini'
+  | 'interactions'
   | 'codex'
   | 'xai'
   | 'claude'
@@ -16,9 +18,12 @@ export type ProviderBrand =
   | 'code0'
   | 'fennoAI'
   | 'qiniuCloud'
+  | 'lmuAI'
+  | 'infistar'
   | 'kimi';
 
-export type SponsorProviderBrand = 'apikeyFun' | 'code0' | 'fennoAI' | 'qiniuCloud' | 'kimi';
+export type SponsorProviderBrand =
+  'apikeyFun' | 'code0' | 'fennoAI' | 'qiniuCloud' | 'lmuAI' | 'infistar' | 'kimi';
 
 export const PROVIDER_SORT_BY_VALUES = ['name', 'priority', 'recent-success'] as const;
 export type ProviderSortBy = (typeof PROVIDER_SORT_BY_VALUES)[number];
@@ -34,6 +39,7 @@ export const DEFAULT_FAILURE_WARMUP_MAX_ATTEMPTS = 5;
 
 export type ProviderResourceSelector =
   | { brand: 'gemini'; apiKey: string; baseUrl?: string; index: number }
+  | { brand: 'interactions'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'codex'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'xai'; apiKey: string; baseUrl?: string; index: number }
   | { brand: 'claude'; apiKey: string; baseUrl?: string; index: number }
@@ -63,6 +69,20 @@ export type ProviderResourceSelector =
     }
   | {
       brand: 'qiniuCloud';
+      openaiIndices: number[];
+      claudeIndices: number[];
+      codexIndices: number[];
+      geminiIndices: number[];
+    }
+  | {
+      brand: 'lmuAI';
+      openaiIndices: number[];
+      claudeIndices: number[];
+      codexIndices: number[];
+      geminiIndices: number[];
+    }
+  | {
+      brand: 'infistar';
       openaiIndices: number[];
       claudeIndices: number[];
       codexIndices: number[];
@@ -146,7 +166,10 @@ export interface ModelEntryInput {
   priority?: number;
   testModel?: string;
   image?: boolean;
+  /** Original backend value, preserved until the standard-level selector is changed. */
   thinkingJson?: string;
+  thinkingLevels?: ThinkingLevel[];
+  thinkingLevelsTouched?: boolean;
 }
 
 export type SponsorProtocol = 'openai' | 'codex' | 'claude' | 'gemini';
@@ -161,6 +184,7 @@ export interface SponsorKeyEntryInput {
   disabled: boolean;
   disableCooling?: boolean;
   priority?: number;
+  weight?: number;
   models: ModelEntryInput[];
 }
 
@@ -168,6 +192,7 @@ export interface ApiKeyEntryInput {
   apiKey: string;
   existingApiKey?: string;
   proxyUrl: string;
+  weight?: number;
   authIndex?: string;
 }
 
@@ -192,6 +217,7 @@ export interface ProviderEntryFormInput {
   failureWarmupStatusCodes?: number[];
   failureWarmupMaxAttempts?: number;
   priority?: number;
+  weight?: number;
 
   /** 高级折叠区 */
   models: ModelEntryInput[];

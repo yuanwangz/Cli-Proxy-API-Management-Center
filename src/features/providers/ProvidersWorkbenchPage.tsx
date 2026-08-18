@@ -8,6 +8,7 @@ import { useProviderRecentRequests } from '@/components/providers/hooks/useProvi
 import {
   getOpenAIProviderRecentWindowStats,
   getProviderRecentWindowStats,
+  getProviderUsageKey,
   type ProviderRecentUsageMap,
 } from '@/components/providers/utils';
 import type { OpenAIProviderConfig } from '@/types';
@@ -81,17 +82,16 @@ const getResourceRecentSuccess = (
   resource: ProviderResource,
   usageByProvider: ProviderRecentUsageMap
 ): number => {
+  if (isMultiProtocolSponsorBrand(resource.brand)) {
+    return 0;
+  }
   if (resource.brand === 'openaiCompatibility') {
     return getOpenAIProviderRecentWindowStats(resource.raw as OpenAIProviderConfig, usageByProvider)
       .success;
   }
-  if (isMultiProtocolSponsorBrand(resource.brand)) {
-    return 0;
-  }
-  const usageProvider = resource.brand === 'claudeApi' ? 'claude' : resource.brand;
   return getProviderRecentWindowStats(
     usageByProvider,
-    usageProvider,
+    getProviderUsageKey(resource.brand),
     resource.apiKey ?? undefined,
     resource.baseUrl ?? undefined
   ).success;

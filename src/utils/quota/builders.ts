@@ -21,6 +21,7 @@ import type {
 } from '@/types';
 import { normalizeNumberValue, normalizeQuotaFraction, normalizeStringValue } from './parsers';
 import { GEMINI_CLI_GROUP_LOOKUP, GEMINI_CLI_GROUP_ORDER } from './constants';
+import { parseOffsetSecondsToMs, resolveResetMs } from './resetInstants';
 import { isIgnoredGeminiCliModel } from './validators';
 
 export function pickEarlierResetTime(current?: string, next?: string): string | undefined {
@@ -239,8 +240,10 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
         const delta = date.getTime() - now;
         if (delta <= 0) return undefined;
         const totalMinutes = Math.floor(delta / 60000);
-        const hours = Math.floor(totalMinutes / 60);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
         const minutes = totalMinutes % 60;
+        if (days > 0) return `${days}d ${hours}h`;
         if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
         if (hours > 0) return `${hours}h`;
         if (minutes > 0) return `${minutes}m`;
@@ -255,8 +258,11 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
   for (const key of relativeKeys) {
     const raw = toInt(data[key]);
     if (raw !== null && raw > 0) {
-      const hours = Math.floor(raw / 3600);
-      const minutes = Math.floor((raw % 3600) / 60);
+      const totalMinutes = Math.floor(raw / 60);
+      const days = Math.floor(totalMinutes / 1440);
+      const hours = Math.floor((totalMinutes % 1440) / 60);
+      const minutes = totalMinutes % 60;
+      if (days > 0) return `${days}d ${hours}h`;
       if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
       if (hours > 0) return `${hours}h`;
       if (minutes > 0) return `${minutes}m`;
@@ -268,14 +274,54 @@ function kimiResetHint(data: Record<string, unknown>): string | undefined {
 }
 
 function kimiDurationToken(duration: number, rawTimeUnit: unknown): string {
-  const unit = typeof rawTimeUnit === 'string' ? rawTimeUnit.trim().toUpperCase() : '';
+  const unit = typeof rawTimeUnit === 'string'
+    ? rawTimeUnit.trim().toUpperCase().replace(/^TIME_UNIT_/, '')
+    : '';
   if (unit === 'SECONDS' || unit === 'SECOND') return `${duration}s`;
-  if (!unit || unit === 'MINUTES' || unit === 'MINUTE') {
-    return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
-  }
   if (unit === 'HOURS' || unit === 'HOUR') return `${duration}h`;
   if (unit === 'DAYS' || unit === 'DAY') return `${duration}d`;
+  if (unit === 'WEEKS' || unit === 'WEEK') return `${duration}w`;
   return duration % 60 === 0 ? `${duration / 60}h` : `${duration}m`;
+}
+
+function normalizeKimiTimeUnit(rawTimeUnit: unknown): 'second' | 'minute' | 'hour' | 'day' | 'week' | null {
+  const unit = typeof rawTimeUnit === 'string'
+    ? rawTimeUnit.trim().toUpperCase().replace(/^TIME_UNIT_/, '')
+    : '';
+  if (unit === 'SECONDS' || unit === 'SECOND') return 'second';
+  if (!unit || unit === 'MINUTES' || unit === 'MINUTE') return 'minute';
+  if (unit === 'HOURS' || unit === 'HOUR') return 'hour';
+  if (unit === 'DAYS' || unit === 'DAY') return 'day';
+  if (unit === 'WEEKS' || unit === 'WEEK') return 'week';
+  return null;
+}
+
+function kimiResetMs(data: Record<string, unknown>): number | null {
+  const absolute = resolveResetMs([data.reset_at, data.resetAt, data.reset_time, data.resetTime]);
+  if (absolute !== null) return absolute;
+  const now = Date.now();
+  for (const key of ['reset_in', 'resetIn', 'ttl']) {
+    const relative = parseOffsetSecondsToMs(data[key], now);
+    if (relative !== null) return relative;
+  }
+  return null;
+}
+
+function kimiPeriodHours(label: string | undefined, duration: number | null, rawTimeUnit?: unknown): number | null {
+  if (duration !== null && duration > 0) {
+    const unit = normalizeKimiTimeUnit(rawTimeUnit);
+    if (unit === 'second') return duration / 3600;
+    if (unit === 'hour') return duration;
+    if (unit === 'day') return duration * 24;
+    if (unit === 'week') return duration * 7 * 24;
+    return duration / 60;
+  }
+  const text = (label ?? '').toLowerCase();
+  if (text.includes('daily') || text.includes('day')) return 24;
+  if (text.includes('weekly') || text.includes('week')) return 168;
+  if (text.includes('monthly') || text.includes('month')) return 720;
+  if (text.includes('5h') || text.includes('hour')) return 5;
+  return null;
 }
 
 function kimiLimitLabel(
@@ -317,8 +363,10 @@ function kimiLimitLabel(
 
 function toKimiUsageRow(
   data: Record<string, unknown>,
-  fallbackLabel: KimiRowLabel
-): (KimiRowLabel & { used: number; limit: number; resetHint?: string }) | null {
+  fallbackLabel: KimiRowLabel,
+  duration: number | null = null,
+  timeUnit?: unknown
+): (KimiRowLabel & { used: number; limit: number; resetHint?: string; resetAtMs?: number | null; periodHours?: number | null }) | null {
   const limit = toInt(data.limit);
   let used = toInt(data.used);
   if (used === null) {
@@ -337,6 +385,8 @@ function toKimiUsageRow(
     used: used ?? 0,
     limit: limit ?? 0,
     resetHint: kimiResetHint(data),
+    resetAtMs: kimiResetMs(data),
+    periodHours: kimiPeriodHours(explicitLabel || fallbackLabel.label || fallbackLabel.labelKey, duration, timeUnit),
   };
 }
 
@@ -353,7 +403,20 @@ export function buildKimiQuotaRows(payload: KimiUsagePayload): KimiQuotaRow[] {
         item.window && typeof item.window === 'object' ? item.window : {}
       ) as KimiLimitWindow;
       const fallbackLabel = kimiLimitLabel(item, detail, window, idx);
-      const row = toKimiUsageRow(detail as Record<string, unknown>, fallbackLabel);
+      const duration =
+        toInt(window.duration) ??
+        toInt((item as Record<string, unknown>).duration) ??
+        toInt((detail as Record<string, unknown>).duration);
+      const timeUnit =
+        (window as Record<string, unknown>).timeUnit ??
+        (item as Record<string, unknown>).timeUnit ??
+        (detail as Record<string, unknown>).timeUnit;
+      const row = toKimiUsageRow(
+        detail as Record<string, unknown>,
+        fallbackLabel,
+        duration,
+        timeUnit
+      );
       if (row) {
         rows.push({ id: `limit-${idx}`, ...row });
       }
@@ -418,6 +481,19 @@ const emptyXaiBillingSummary = (): XaiBillingSummary => ({
   onDemandUsedPercent: null,
   usedPercent: null,
 });
+
+function xaiPeriodInstants(
+  periodStart: string | undefined,
+  periodEnd: string | undefined
+): { resetAtMs: number | null; periodHours: number | null } {
+  const resetAtMs = resolveResetMs([periodEnd]);
+  const startMs = resolveResetMs([periodStart]);
+  const periodHours =
+    resetAtMs !== null && startMs !== null && resetAtMs > startMs
+      ? (resetAtMs - startMs) / 3_600_000
+      : null;
+  return { resetAtMs, periodHours };
+}
 
 export function buildXaiBillingSummary(
   config: XaiBillingConfig | null | undefined
@@ -502,6 +578,10 @@ export function buildXaiBillingSummary(
   summary.billingPeriodEnd = hasMonthlyData ? billingPeriodEnd : undefined;
   summary.usedPercent = usedPercent;
 
+  const periodInstants = xaiPeriodInstants(summary.periodStart, summary.periodEnd);
+  summary.resetAtMs = periodInstants.resetAtMs;
+  summary.periodHours = periodInstants.periodHours;
+
   return summary;
 }
 
@@ -512,13 +592,25 @@ export function mergeXaiBillingSummaries(
   if (!primary) return fallback;
   if (!fallback) return primary;
 
+  const periodSummary =
+    primary.periodType !== 'unknown'
+      ? primary
+      : fallback.periodType !== 'unknown'
+        ? fallback
+        : primary;
+  const periodStart = periodSummary.periodStart;
+  const periodEnd = periodSummary.periodEnd;
+  const periodInstants = xaiPeriodInstants(periodStart, periodEnd);
+
   return {
     mode: 'billing',
     source: 'cli-chat-proxy',
-    periodType: primary.periodType !== 'unknown' ? primary.periodType : fallback.periodType,
+    periodType: periodSummary.periodType,
     usagePercent: primary.usagePercent ?? fallback.usagePercent,
-    periodStart: primary.periodStart ?? fallback.periodStart,
-    periodEnd: primary.periodEnd ?? fallback.periodEnd,
+    periodStart,
+    periodEnd,
+    resetAtMs: periodInstants.resetAtMs,
+    periodHours: periodInstants.periodHours,
     productUsage: primary.productUsage.length > 0 ? primary.productUsage : fallback.productUsage,
     monthlyLimitCents: primary.monthlyLimitCents ?? fallback.monthlyLimitCents,
     usedCents: primary.usedCents ?? fallback.usedCents,

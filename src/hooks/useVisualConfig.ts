@@ -10,6 +10,7 @@ import type {
   PayloadParamEntry,
   PayloadParamValueType,
   PayloadRule,
+  RoutingStrategy,
   VisualConfigValues,
   VisualConfigValidationErrors,
   PayloadParamValidationErrorCode,
@@ -430,6 +431,17 @@ function parseRawPayloadParamValue(raw: unknown): string {
 function parsePayloadProtocol(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
   return raw.trim() ? raw : undefined;
+}
+
+export function parseRoutingStrategy(raw: unknown): RoutingStrategy {
+  const normalized = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (['weighted-round-robin', 'weightedroundrobin', 'wrr'].includes(normalized)) {
+    return 'weighted-round-robin';
+  }
+  if (['fill-first', 'fillfirst', 'ff'].includes(normalized)) return 'fill-first';
+  return 'round-robin';
 }
 
 export function parseDisableImageGenerationMode(raw: unknown): DisableImageGenerationMode {
@@ -1153,7 +1165,7 @@ export function useVisualConfig() {
         quotaSwitchPreviewModel: Boolean(quotaExceeded?.['switch-preview-model'] ?? true),
         quotaAntigravityCredits: Boolean(quotaExceeded?.['antigravity-credits'] ?? false),
 
-        routingStrategy: routing?.strategy === 'fill-first' ? 'fill-first' : 'round-robin',
+        routingStrategy: parseRoutingStrategy(routing?.strategy),
         routingSessionAffinity: Boolean(
           routing?.['session-affinity'] ?? routing?.sessionAffinity ?? routing?.['sessionAffinity']
         ),
@@ -1580,6 +1592,8 @@ export function useVisualConfig() {
   return {
     visualValues,
     visualDirty,
+    /** 脏字段的叶值键集合（streaming 为点号叶），供 tab 脏点 / 头部计数消费。 */
+    visualDirtyFields: dirtyFields as ReadonlySet<string>,
     visualParseError,
     visualValidationErrors,
     visualHasPayloadValidationErrors,
