@@ -1219,6 +1219,29 @@
   }
 }
 
+// XX: Antigravity returns several model groups for one credential. Keep those groups
+// inside the quota column instead of letting the row-level flex layout push them
+// into the token and snapshot columns.
+.quotaListRow.antigravityCard {
+  .quotaSection {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .antigravityQuotaGroup {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .quotaSection .quotaRow {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 auto;
+  }
+}
+
 .quotaOverflowAnchor {
   position: relative;
   display: inline-flex;
