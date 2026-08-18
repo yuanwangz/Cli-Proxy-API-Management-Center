@@ -1808,7 +1808,6 @@
     },
     "categories": {
       "title": "Providers",
-      "quickFill": "Quick Fill",
       "activeCount": "{{active}}/{{total}} active",
       "sponsors": "Sponsors"
     },

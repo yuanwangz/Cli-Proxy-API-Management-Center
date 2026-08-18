@@ -163,7 +163,9 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
               group.id !== 'code0' &&
               group.id !== 'claudeApi' &&
               group.id !== 'fennoAI' &&
-              group.id !== 'qiniuCloud'
+              group.id !== 'qiniuCloud' &&
+              group.id !== 'lmuAI' &&
+              group.id !== 'infistar'
           ),
     [allGroups, fixedBrand]
   );
