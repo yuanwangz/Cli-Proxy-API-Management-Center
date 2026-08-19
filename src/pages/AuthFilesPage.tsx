@@ -63,7 +63,6 @@ import {
   isAuthFilesInspectionStatusFilter,
   isAuthFilesStatusCodeFilter,
   AUTH_FILES_ARCHIVE_FILTERS,
-  AUTH_FILES_INSPECTION_STATUS_FILTERS,
   AUTH_FILES_STATUS_CODE_FILTERS,
   readAuthFilesUiState,
   readPersistedAuthFilesCompactMode,
@@ -595,19 +594,6 @@ export function AuthFilesPage() {
     setInspectionStatusFilter(value);
     setPage(1);
   }, []);
-  const inspectionStatusOptions = useMemo(
-    () =>
-      AUTH_FILES_INSPECTION_STATUS_FILTERS.map((value) => ({
-        value,
-        label:
-          value === 'all'
-            ? t('auth_files.inspection_filter_all')
-            : value === 'not_checked'
-              ? t('auth_files.inspection_filter_not_checked')
-              : t(`auth_files.inspection_status_${value}`),
-      })),
-    [t]
-  );
   const inspectionBusyLabel =
     inspectionProgress.total > 0
       ? t('auth_files.inspection_progress', {
@@ -1056,17 +1042,6 @@ export function AuthFilesPage() {
                     fullWidth
                   />
                 </div>
-                <div className={`${styles.filterItem} ${styles.inspectionFilterItem}`}>
-                  <label>{t('auth_files.inspection_filter_label')}</label>
-                  <Select
-                    className={styles.sortSelect}
-                    value={inspectionStatusFilter}
-                    options={inspectionStatusOptions}
-                    onChange={handleInspectionStatusFilterChange}
-                    ariaLabel={t('auth_files.inspection_filter_label')}
-                    fullWidth
-                  />
-                </div>
                 <div
                   className={`${styles.filterItem} ${styles.statusCodeFilterItem} ${styles.statusCodeGroupItem}`}
                 >
@@ -1186,6 +1161,15 @@ export function AuthFilesPage() {
                   {inspectionRunning && <strong>{inspectionBusyLabel}</strong>}
                 </div>
                 <div className={styles.inspectionSummary}>
+                  <button
+                    type="button"
+                    className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'all' ? styles.inspectionSummaryItemActive : ''}`}
+                    aria-pressed={inspectionStatusFilter === 'all'}
+                    onClick={() => handleInspectionStatusFilterChange('all')}
+                  >
+                    {t('auth_files.inspection_filter_all')}
+                    <strong>{sorted.length}</strong>
+                  </button>
                   <button
                     type="button"
                     className={`${styles.inspectionSummaryItem} ${inspectionStatusFilter === 'healthy' ? styles.inspectionSummaryItemActive : ''}`}

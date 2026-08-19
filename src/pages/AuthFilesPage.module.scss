@@ -304,14 +304,6 @@
   }
 }
 
-.inspectionFilterItem {
-  grid-column: span 4;
-
-  @include tablet {
-    grid-column: span 4;
-  }
-}
-
 .filterItem {
   display: flex;
   flex-direction: column;
@@ -354,7 +346,6 @@
   .filterSearchItem,
   .pageSizeFilterItem,
   .sortFilterItem,
-  .inspectionFilterItem,
   .statusCodeGroupItem,
   .archiveFilterItem {
     grid-column: 1 / -1;
