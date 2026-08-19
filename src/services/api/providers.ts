@@ -402,10 +402,10 @@ const serializeVertexModelAliases = (models?: ModelAlias[]) =>
         .map((model) => {
           const name = typeof model?.name === 'string' ? model.name.trim() : '';
           const alias = typeof model?.alias === 'string' ? model.alias.trim() : '';
-          if (!name || !alias) return null;
+          if (!name) return null;
           return {
             name,
-            alias,
+            alias: alias || name,
             ...(model.thinking ? { thinking: model.thinking } : {}),
           };
         })

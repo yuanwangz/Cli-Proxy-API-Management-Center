@@ -97,4 +97,25 @@ describe('provider model thinking config', () => {
       },
     ]);
   });
+
+  test('keeps Vertex custom models when alias is omitted', async () => {
+    let putData: unknown;
+    apiClient.get = (async () => ({ 'vertex-api-key': [] })) as typeof apiClient.get;
+    apiClient.put = (async (_url: string, data?: unknown) => {
+      putData = data;
+      return undefined;
+    }) as typeof apiClient.put;
+
+    await providersApi.createVertexConfig({
+      apiKey: 'vertex-key',
+      models: [{ name: 'gemini-custom' }],
+    });
+
+    expect(putData).toEqual([
+      {
+        'api-key': 'vertex-key',
+        models: [{ name: 'gemini-custom', alias: 'gemini-custom' }],
+      },
+    ]);
+  });
 });
