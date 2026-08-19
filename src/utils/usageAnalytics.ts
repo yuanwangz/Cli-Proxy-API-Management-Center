@@ -6,6 +6,7 @@ export interface UsageEvent {
   method: string;
   path: string;
   model: string;
+  reasoningEffort: string;
   provider: string;
   account: string;
   accountFull: string;
@@ -85,6 +86,7 @@ export interface RecentUsageRow {
   status: string;
   provider: string;
   model: string;
+  reasoningEffort: string;
   endpoint: string;
   account: string;
   accountFull: string;
@@ -363,6 +365,7 @@ export const flattenUsageEvents = (
         const provider =
           usageProviderLabel(detail.provider) ||
           inferProvider(modelName, `${account} ${authIndex}`, endpointName);
+        const reasoningEffort = safeText(detail.reasoning_effort, '');
         const errorDetail = readErrorDetail(detail);
 
         events.push({
@@ -371,6 +374,7 @@ export const flattenUsageEvents = (
           method,
           path,
           model: safeText(modelName, '-'),
+          reasoningEffort,
           provider,
           account,
           accountFull,
@@ -684,6 +688,7 @@ export const buildUsageAnalytics = (
       status: event.statusCode ? String(event.statusCode) : event.failed ? '失败' : '200',
       provider: event.provider,
       model: event.model,
+      reasoningEffort: event.reasoningEffort,
       endpoint: event.path || event.endpoint,
       account: event.account,
       accountFull: event.accountFull,
@@ -708,6 +713,12 @@ export const buildUsageAnalytics = (
     accountOptions: uniqueAccountOptions(events),
     endpointOptions: uniqueSorted(events.map((event) => event.endpoint)),
   };
+};
+
+export const formatModelWithReasoning = (model: string, reasoningEffort: string): string => {
+  const modelLabel = model.trim() || '-';
+  const effortLabel = reasoningEffort.trim();
+  return effortLabel ? `${modelLabel} (${effortLabel})` : modelLabel;
 };
 
 export const formatCompactNumber = (value: number): string => {

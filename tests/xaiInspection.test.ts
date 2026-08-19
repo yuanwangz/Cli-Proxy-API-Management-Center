@@ -9,6 +9,7 @@ import {
   computeCachePercent,
   formatCachePercent,
   formatLatencyPair,
+  formatModelWithReasoning,
   formatTokenTriple,
   flattenUsageEvents,
 } from '../src/utils/usageAnalytics';
@@ -80,6 +81,11 @@ describe('usage recent-row format helpers', () => {
     expect(formatLatencyPair(null, 500)).toBe('— / 500 ms');
   });
 
+  test('appends reasoning effort to the recent model label when present', () => {
+    expect(formatModelWithReasoning('gpt-5.4', 'high')).toBe('gpt-5.4 (high)');
+    expect(formatModelWithReasoning('gpt-5.4', '')).toBe('gpt-5.4');
+  });
+
   test('reads ttft_ms and cache tokens from usage payload', () => {
     const payload: UsagePayload = {
       apis: {
@@ -90,6 +96,7 @@ describe('usage recent-row format helpers', () => {
                 {
                   timestamp: '2026-07-14T00:00:00Z',
                   provider: 'xai',
+                  reasoning_effort: 'high',
                   latency_ms: 2100,
                   ttft_ms: 320,
                   tokens: {
@@ -110,5 +117,6 @@ describe('usage recent-row format helpers', () => {
     expect(event?.ttftMs).toBe(320);
     expect(event?.latencyMs).toBe(2100);
     expect(event?.cachedTokens).toBe(40);
+    expect(event?.reasoningEffort).toBe('high');
   });
 });

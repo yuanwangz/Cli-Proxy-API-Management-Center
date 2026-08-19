@@ -40,6 +40,7 @@ import {
   formatCurrency,
   formatLatency,
   formatLatencyPair,
+  formatModelWithReasoning,
   formatPercent,
   formatTokenTriple,
   getModelPriceEstimate,
@@ -874,7 +875,7 @@ function RecentRequestsTable({
                   </span>
                 </td>
                 <td>{row.provider}</td>
-                <td>{row.model}</td>
+                <td>{formatModelWithReasoning(row.model, row.reasoningEffort)}</td>
                 <td>{row.endpoint}</td>
                 <td>
                   <CredentialChip
