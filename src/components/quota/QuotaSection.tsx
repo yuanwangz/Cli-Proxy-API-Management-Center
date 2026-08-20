@@ -2,7 +2,7 @@
  * Generic quota section component.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -27,9 +27,15 @@ import {
 } from '@/utils/authFileStatus';
 import { quotaHasAvailableCapacity, type QuotaAvailability } from '@/utils/quotaAvailability';
 import { parseTimestampMs } from '@/utils/timestamp';
+import {
+  nearestQuotaResetMs,
+  normalizeQuotaProvider,
+  QUOTA_REFRESH_GRACE_MS,
+} from '@/utils/quotaRefreshSchedule';
 import { QuotaCard } from './QuotaCard';
 import type { QuotaStatusState } from './QuotaCard';
 import { useQuotaLoader } from './useQuotaLoader';
+import type { RegisterQuotaRefreshHandler } from './useQuotaRefreshCoordinator';
 import type { QuotaConfig } from './quotaConfigs';
 import { IconChevronDown, IconRefreshCw, IconSearch, IconX } from '@/components/ui/icons';
 import styles from '@/pages/QuotaPage.module.scss';
@@ -45,9 +51,6 @@ type ResetSortMode = 'default' | 'reset_asc';
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
 const AVAILABILITY_FILTERS: AvailabilityFilter[] = ['all', 'available', 'unavailable'];
 const RESET_SORT_OPTIONS: ResetSortMode[] = ['default', 'reset_asc'];
-const NO_RESET_TIME = Number.POSITIVE_INFINITY;
-const RESET_REFRESH_GRACE_MS = 1000;
-const SHORT_DATE_ROLLOVER_MS = 180 * 24 * 60 * 60 * 1000;
 
 interface QuotaPaginationState<T> {
   pageSize: number;
@@ -131,6 +134,7 @@ interface QuotaSectionProps<TState extends QuotaStatusState, TData> {
   snapshots?: QuotaSnapshotRecord[];
   tokenUsage?: Record<string, CredentialTokenUsage>;
   onQuotaRefreshComplete?: () => void | Promise<void>;
+  onRegisterAutoRefresh?: RegisterQuotaRefreshHandler;
 }
 
 const resolveAuthIndex = (file: AuthFileItem): string => {
@@ -148,118 +152,14 @@ const snapshotFileName = (snapshot: QuotaSnapshotRecord): string =>
   String(snapshot.file_name ?? snapshot.fileName ?? '').trim();
 
 const snapshotProvider = (snapshot: QuotaSnapshotRecord): string =>
-  String(snapshot.provider ?? '')
-    .trim()
-    .toLowerCase();
+  normalizeQuotaProvider(snapshot.provider);
 
-const resetValueToMs = (value: unknown, nowMs: number): number => {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value > 1_000_000_000_000 ? value : value * 1000;
-  }
-
-  if (typeof value !== 'string') return NO_RESET_TIME;
-  const text = value.trim();
-  if (!text || text === '-') return NO_RESET_TIME;
-  if (text === '<1m') return nowMs + 60_000;
-
-  const shortDateMatch = text.match(/^(\d{1,2})[/-](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?$/);
-  if (shortDateMatch) {
-    const [, month, day, hour = '0', minute = '0'] = shortDateMatch;
-    const monthValue = Number(month);
-    const dayValue = Number(day);
-    const hourValue = Number(hour);
-    const minuteValue = Number(minute);
-    const validParts =
-      monthValue >= 1 &&
-      monthValue <= 12 &&
-      dayValue >= 1 &&
-      dayValue <= 31 &&
-      hourValue >= 0 &&
-      hourValue <= 23 &&
-      minuteValue >= 0 &&
-      minuteValue <= 59;
-    if (!validParts) return NO_RESET_TIME;
-    const now = new Date(nowMs);
-    let date = new Date(now.getFullYear(), monthValue - 1, dayValue, hourValue, minuteValue);
-    if (
-      !Number.isNaN(date.getTime()) &&
-      date.getMonth() === monthValue - 1 &&
-      date.getDate() === dayValue
-    ) {
-      if (date.getTime() < nowMs - SHORT_DATE_ROLLOVER_MS) {
-        date = new Date(now.getFullYear() + 1, monthValue - 1, dayValue, hourValue, minuteValue);
-      } else if (date.getTime() > nowMs + SHORT_DATE_ROLLOVER_MS) {
-        date = new Date(now.getFullYear() - 1, monthValue - 1, dayValue, hourValue, minuteValue);
-      }
-      return date.getTime();
-    }
-  }
-
-  const parsed = parseTimestampMs(text);
-  if (Number.isFinite(parsed)) return parsed;
-
-  const zhDateMatch = text.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})(?:\D+(\d{1,2}):(\d{2}))?/);
-  if (zhDateMatch) {
-    const [, year, month, day, hour = '0', minute = '0'] = zhDateMatch;
-    const date = new Date(
-      Number(year),
-      Number(month) - 1,
-      Number(day),
-      Number(hour),
-      Number(minute)
-    );
-    if (!Number.isNaN(date.getTime())) return date.getTime();
-  }
-
-  const hours = text.match(/(\d+)\s*h/i);
-  const minutes = text.match(/(\d+)\s*m/i);
-  if (hours || minutes) {
-    const hourMs = hours ? Number(hours[1]) * 60 * 60 * 1000 : 0;
-    const minuteMs = minutes ? Number(minutes[1]) * 60 * 1000 : 0;
-    return nowMs + hourMs + minuteMs;
-  }
-
-  return NO_RESET_TIME;
-};
-
-const collectResetTimes = (value: unknown, nowMs: number, times: number[]) => {
-  if (!value) return;
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectResetTimes(entry, nowMs, times));
-    return;
-  }
-  if (typeof value !== 'object') return;
-
-  const record = value as Record<string, unknown>;
-  for (const key of [
-    'resetAt',
-    'reset_at',
-    'resetTime',
-    'reset_time',
-    'resets_at',
-    'resetLabel',
-    'resetHint',
-  ]) {
-    const ms = resetValueToMs(record[key], nowMs);
-    if (Number.isFinite(ms)) times.push(ms);
-  }
-
-  for (const key of ['resetAfterSeconds', 'reset_after_seconds', 'resetIn', 'reset_in', 'ttl']) {
-    const raw = record[key];
-    const seconds = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
-    if (Number.isFinite(seconds) && seconds > 0) times.push(nowMs + seconds * 1000);
-  }
-
-  for (const key of ['windows', 'groups', 'buckets', 'rows']) {
-    collectResetTimes(record[key], nowMs, times);
-  }
-};
-
-const nearestResetMs = (quota: QuotaStatusState | undefined, nowMs: number): number => {
-  if (!quota || quota.status !== 'success') return NO_RESET_TIME;
-  const times: number[] = [];
-  collectResetTimes(quota, nowMs, times);
-  return times.length > 0 ? Math.min(...times) : NO_RESET_TIME;
+const nearestResetMs = (
+  provider: string,
+  quota: QuotaStatusState | undefined,
+  nowMs: number
+): number => {
+  return nearestQuotaResetMs(quota, nowMs, provider);
 };
 
 const quotaRefreshedAtMs = (quota: QuotaStatusState | undefined): number => {
@@ -276,21 +176,6 @@ const snapshotRefreshedAtMs = (snapshot: QuotaSnapshotRecord): number => {
   if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
   const parsed = parseTimestampMs(snapshot.refreshed_at ?? snapshot.refreshedAt);
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const expiredQuotaResetMs = (quota: QuotaStatusState | undefined, nowMs: number): number => {
-  if (!quota || quota.status !== 'success') return NO_RESET_TIME;
-
-  const times: number[] = [];
-  collectResetTimes(quota, nowMs, times);
-  const expiredTimes = times
-    .filter((value) => Number.isFinite(value) && value <= nowMs + RESET_REFRESH_GRACE_MS)
-    .sort((left, right) => left - right);
-  if (expiredTimes.length === 0) return NO_RESET_TIME;
-
-  const resetMs = expiredTimes[0];
-  const refreshedAtMs = quotaRefreshedAtMs(quota);
-  return refreshedAtMs > 0 && refreshedAtMs >= resetMs ? NO_RESET_TIME : resetMs;
 };
 
 const quotaWithSnapshotMetadata = <TState extends QuotaStatusState>(
@@ -316,6 +201,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   snapshots = [],
   tokenUsage = {},
   onQuotaRefreshComplete,
+  onRegisterAutoRefresh,
 }: QuotaSectionProps<TState, TData>) {
   const { t } = useTranslation();
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
@@ -413,7 +299,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       .map((file, index) => ({
         file,
         index,
-        resetMs: nearestResetMs(quota[file.name], sortNowMs),
+        resetMs: nearestResetMs(config.type, quota[file.name], sortNowMs),
       }))
       .sort((left, right) => {
         if (left.resetMs !== right.resetMs) return left.resetMs - right.resetMs;
@@ -437,6 +323,13 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     setLoading,
   } = useQuotaPagination(displayFiles);
 
+  const automaticRefreshRef = useRef<(targets: AuthFileItem[]) => Promise<void>>(async () => {});
+  automaticRefreshRef.current = async (targets) => {
+    const refreshableTargets = targets.filter((file) => config.filterFn(file));
+    if (refreshableTargets.length === 0) return;
+    await loadQuota(refreshableTargets, 'page', setLoading);
+  };
+
   const refreshQuotaTargets = useCallback(
     async (targets: AuthFileItem[], scope: QuotaScope) => {
       await loadQuota(targets, scope, setLoading);
@@ -445,20 +338,17 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     [loadQuota, onQuotaRefreshComplete, setLoading]
   );
 
-  const visibleKeys = useMemo(() => pageItems.map(itemKey), [pageItems]);
-
-  const expiredVisibleRefreshes = useMemo(
-    () =>
-      pageItems
-        .map((file) => {
-          if (!isQuotaAwareAvailable(file)) return null;
-          const resetMs = expiredQuotaResetMs(quota[file.name], availabilityNowMs);
-          if (resetMs === NO_RESET_TIME) return null;
-          return { file };
-        })
-        .filter((entry): entry is { file: AuthFileItem } => entry !== null),
-    [availabilityNowMs, isQuotaAwareAvailable, pageItems, quota]
+  const refreshQuotaTargetsAutomatically = useCallback(
+    (targets: AuthFileItem[]) => automaticRefreshRef.current(targets),
+    []
   );
+
+  useEffect(() => {
+    if (!onRegisterAutoRefresh || disabled) return;
+    return onRegisterAutoRefresh(config.type, refreshQuotaTargetsAutomatically);
+  }, [config.type, disabled, onRegisterAutoRefresh, refreshQuotaTargetsAutomatically]);
+
+  const visibleKeys = useMemo(() => pageItems.map(itemKey), [pageItems]);
 
   const selectedTargets = useMemo(
     () => displayFiles.filter((file) => selectedKeys.has(itemKey(file))),
@@ -540,9 +430,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     const nowMs = Date.now();
     const times = [
       ...matchingFiles.map(getCredentialNextRetryAt),
-      ...pageItems.map((file) => nearestResetMs(quota[file.name], nowMs)),
+      ...pageItems.map((file) => nearestResetMs(config.type, quota[file.name], nowMs)),
     ]
-      .filter((value) => Number.isFinite(value) && value > nowMs + RESET_REFRESH_GRACE_MS)
+      .filter((value) => Number.isFinite(value) && value > nowMs + QUOTA_REFRESH_GRACE_MS)
       .sort((left, right) => left - right);
     const nextRefreshAt = times[0];
 
@@ -554,28 +444,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         setAvailabilityNowMs(nextNowMs);
         setSortNowMs(nextNowMs);
       },
-      Math.max(1000, nextRefreshAt - nowMs + RESET_REFRESH_GRACE_MS)
+      Math.max(1000, nextRefreshAt - nowMs + QUOTA_REFRESH_GRACE_MS)
     );
 
     return () => window.clearTimeout(timeout);
   }, [availabilityNowMs, loading, matchingFiles, pageItems, quota, sectionLoading]);
-
-  useEffect(() => {
-    if (
-      !isExpanded ||
-      disabled ||
-      loading ||
-      sectionLoading ||
-      expiredVisibleRefreshes.length === 0
-    ) {
-      return;
-    }
-
-    void refreshQuotaTargets(
-      expiredVisibleRefreshes.map((entry) => entry.file),
-      'page'
-    );
-  }, [disabled, expiredVisibleRefreshes, isExpanded, loading, refreshQuotaTargets, sectionLoading]);
 
   const handleAvailabilityChange = useCallback(
     (value: AvailabilityFilter) => {
@@ -889,8 +762,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
                   0,
                   Math.floor(
                     Number(
-                      (itemQuota as { rateLimitResetCreditsAvailableCount?: number | null } | undefined)
-                        ?.rateLimitResetCreditsAvailableCount ?? 0
+                      (
+                        itemQuota as
+                          | { rateLimitResetCreditsAvailableCount?: number | null }
+                          | undefined
+                      )?.rateLimitResetCreditsAvailableCount ?? 0
                     ) || 0
                   )
                 );

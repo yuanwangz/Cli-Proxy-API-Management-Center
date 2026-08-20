@@ -2,7 +2,7 @@
  * Quota management page - coordinates the three quota sections.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHeaderRefresh } from '@/hooks/useHeaderRefresh';
 import { useAuthStore } from '@/stores';
@@ -18,7 +18,8 @@ import {
 } from '@/components/quota';
 import type { AuthFileItem } from '@/types';
 import type { QuotaSnapshotsPayload } from '@/types/quota';
-import { getCredentialNextRetryAt } from '@/utils/authFileStatus';
+import { createSingleFlight } from '@/utils/singleFlight';
+import { useQuotaRefreshCoordinator } from '@/components/quota/useQuotaRefreshCoordinator';
 import styles from './QuotaPage.module.scss';
 
 export function QuotaPage() {
@@ -32,40 +33,76 @@ export function QuotaPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const mountedRef = useRef(true);
+  const tRef = useRef(t);
+  const loadConfigRef = useRef(createSingleFlight<void>());
+  const loadFilesRef = useRef(createSingleFlight<void>());
+  const loadQuotaSnapshotsRef = useRef(createSingleFlight<void>());
+
+  tRef.current = t;
 
   const disableControls = connectionStatus !== 'connected';
 
-  const loadConfig = useCallback(async () => {
-    try {
-      await configFileApi.fetchConfigYaml();
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
-      setError((prev) => prev || errorMessage);
-    }
-  }, [t]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const loadFiles = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await authFilesApi.list();
-      setFiles(data?.files || []);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  const loadConfig = useCallback(
+    () =>
+      loadConfigRef.current(async () => {
+        try {
+          await configFileApi.fetchConfigYaml();
+        } catch (err: unknown) {
+          if (!mountedRef.current) return;
+          const errorMessage =
+            err instanceof Error ? err.message : tRef.current('notification.refresh_failed');
+          setError((prev) => prev || errorMessage);
+        }
+      }),
+    []
+  );
 
-  const loadQuotaSnapshots = useCallback(async () => {
-    try {
-      setQuotaSnapshots(await quotaApi.getSnapshots());
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
-      setError((prev) => prev || errorMessage);
-    }
-  }, [t]);
+  const loadFiles = useCallback(
+    () =>
+      loadFilesRef.current(async () => {
+        if (!mountedRef.current) return;
+        setLoading(true);
+        setError('');
+        try {
+          const data = await authFilesApi.list();
+          if (mountedRef.current) setFiles(data?.files || []);
+        } catch (err: unknown) {
+          if (mountedRef.current) {
+            const errorMessage =
+              err instanceof Error ? err.message : tRef.current('notification.refresh_failed');
+            setError(errorMessage);
+          }
+        } finally {
+          if (mountedRef.current) setLoading(false);
+        }
+      }),
+    []
+  );
+
+  const loadQuotaSnapshots = useCallback(
+    () =>
+      loadQuotaSnapshotsRef.current(async () => {
+        try {
+          const payload = await quotaApi.getSnapshots();
+          if (mountedRef.current) setQuotaSnapshots(payload);
+        } catch (err: unknown) {
+          if (mountedRef.current) {
+            const errorMessage =
+              err instanceof Error ? err.message : tRef.current('notification.refresh_failed');
+            setError((prev) => prev || errorMessage);
+          }
+        }
+      }),
+    []
+  );
 
   const handleHeaderRefresh = useCallback(async () => {
     await Promise.all([loadConfig(), loadFiles(), loadQuotaSnapshots()]);
@@ -77,30 +114,19 @@ export function QuotaPage() {
     await Promise.all([loadFiles(), loadQuotaSnapshots()]);
   }, [loadFiles, loadQuotaSnapshots]);
 
-  useEffect(() => {
-    loadFiles();
-    loadConfig();
-    loadQuotaSnapshots();
-  }, [loadFiles, loadConfig, loadQuotaSnapshots]);
-
-  useEffect(() => {
-    const nowMs = Date.now();
-    const nextRetryAt = files
-      .map(getCredentialNextRetryAt)
-      .filter((value) => value > nowMs)
-      .sort((left, right) => left - right)[0];
-
-    if (!nextRetryAt) return;
-
-    const timeout = window.setTimeout(() => {
-      void Promise.all([loadFiles(), loadQuotaSnapshots()]);
-    }, Math.max(1000, nextRetryAt - nowMs + 1000));
-
-    return () => window.clearTimeout(timeout);
-  }, [files, loadFiles, loadQuotaSnapshots]);
-
   const snapshots = quotaSnapshots.snapshots;
   const tokenUsage = quotaSnapshots.token_usage ?? quotaSnapshots.tokenUsage ?? {};
+  const registerAutoRefresh = useQuotaRefreshCoordinator({
+    files,
+    snapshots,
+    onRefreshComplete: handleQuotaRefreshComplete,
+  });
+
+  useEffect(() => {
+    void loadFiles();
+    void loadConfig();
+    void loadQuotaSnapshots();
+  }, [loadFiles, loadConfig, loadQuotaSnapshots]);
 
   return (
     <div className={styles.container}>
@@ -119,6 +145,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
         config={ANTIGRAVITY_CONFIG}
@@ -128,6 +155,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
         config={CODEX_CONFIG}
@@ -137,6 +165,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
         config={XAI_CONFIG}
@@ -146,6 +175,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
         config={GEMINI_CLI_CONFIG}
@@ -155,6 +185,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
         config={KIMI_CONFIG}
@@ -164,6 +195,7 @@ export function QuotaPage() {
         snapshots={snapshots}
         tokenUsage={tokenUsage}
         onQuotaRefreshComplete={handleQuotaRefreshComplete}
+        onRegisterAutoRefresh={registerAutoRefresh}
       />
     </div>
   );
