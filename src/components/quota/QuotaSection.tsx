@@ -26,6 +26,7 @@ import {
   isCredentialUnauthorized,
 } from '@/utils/authFileStatus';
 import { quotaHasAvailableCapacity, type QuotaAvailability } from '@/utils/quotaAvailability';
+import { getQuotaCacheKey } from '@/utils/quota/identity';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
   nearestQuotaResetMs,
@@ -207,9 +208,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   const resolvedTheme: ResolvedTheme = useThemeStore((state) => state.resolvedTheme);
   const showNotification = useNotificationStore((state) => state.showNotification);
   const showConfirmation = useNotificationStore((state) => state.showConfirmation);
-  const setQuota = useQuotaStore((state) => state[config.storeSetter]) as QuotaSetter<
-    Record<string, TState>
-  >;
+  const setQuota = useQuotaStore(
+    (state) => state[config.storeSetter]
+  ) as unknown as QuotaSetter<Record<string, TState>>;
   const { quota, loadQuota } = useQuotaLoader(config);
 
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
@@ -228,7 +229,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   const quotaAwareAvailability = useCallback(
     (file: AuthFileItem): QuotaAvailability => {
-      const snapshotAvailability = quotaHasAvailableCapacity(quota[file.name]);
+      const snapshotAvailability = quotaHasAvailableCapacity(quota[getQuotaCacheKey(file)]);
       if (snapshotAvailability === true) {
         if (
           isCredentialArchived(file) ||
@@ -264,7 +265,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
   const isQuotaAwareLimited = useCallback(
     (file: AuthFileItem): boolean => {
-      const snapshotAvailability = quotaHasAvailableCapacity(quota[file.name]);
+      const snapshotAvailability = quotaHasAvailableCapacity(quota[getQuotaCacheKey(file)]);
       if (snapshotAvailability === false) return true;
       if (snapshotAvailability === true) return false;
       return isCredentialQuotaLimited(file, availabilityNowMs);
@@ -299,14 +300,14 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       .map((file, index) => ({
         file,
         index,
-        resetMs: nearestResetMs(config.type, quota[file.name], sortNowMs),
+        resetMs: nearestResetMs(config.type, quota[getQuotaCacheKey(file)], sortNowMs),
       }))
       .sort((left, right) => {
         if (left.resetMs !== right.resetMs) return left.resetMs - right.resetMs;
         return left.index - right.index;
       })
       .map((entry) => entry.file);
-  }, [availabilityFilter, isQuotaAwareAvailable, quota, resetSort, searchedFiles, sortNowMs]);
+  }, [availabilityFilter, config.type, isQuotaAwareAvailable, quota, resetSort, searchedFiles, sortNowMs]);
 
   const {
     pageSize,
@@ -367,9 +368,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     setQuota((prev) => {
       const nextState: Record<string, TState> = {};
       matchingFiles.forEach((file) => {
-        const cached = prev[file.name];
+        const cacheKey = getQuotaCacheKey(file);
+        const cached = prev[cacheKey];
         if (cached) {
-          nextState[file.name] = cached;
+          nextState[cacheKey] = cached;
         }
       });
       return nextState;
@@ -397,10 +399,10 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       relevantSnapshots.forEach((snapshot) => {
         const authIndex = snapshotAuthIndex(snapshot);
         const matchedFile = authIndex ? fileByAuthIndex.get(authIndex) : undefined;
-        const fileName = matchedFile?.name ?? snapshotFileName(snapshot);
-        if (!fileName) return;
+        const cacheKey = matchedFile ? getQuotaCacheKey(matchedFile) : snapshotFileName(snapshot);
+        if (!cacheKey) return;
 
-        const existing = nextState[fileName];
+        const existing = nextState[cacheKey];
         const existingRefreshedAtMs = quotaRefreshedAtMs(existing);
         const snapshotUpdatedAtMs = snapshotRefreshedAtMs(snapshot);
         if (
@@ -416,7 +418,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         const state = quotaWithSnapshotMetadata<TState>(snapshot);
         if (!state) return;
 
-        nextState[fileName] = state;
+        nextState[cacheKey] = state;
         changed = true;
       });
 
@@ -430,7 +432,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     const nowMs = Date.now();
     const times = [
       ...matchingFiles.map(getCredentialNextRetryAt),
-      ...pageItems.map((file) => nearestResetMs(config.type, quota[file.name], nowMs)),
+      ...pageItems.map((file) => nearestResetMs(config.type, quota[getQuotaCacheKey(file)], nowMs)),
     ]
       .filter((value) => Number.isFinite(value) && value > nowMs + QUOTA_REFRESH_GRACE_MS)
       .sort((left, right) => left - right);
@@ -448,7 +450,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     );
 
     return () => window.clearTimeout(timeout);
-  }, [availabilityNowMs, loading, matchingFiles, pageItems, quota, sectionLoading]);
+  }, [availabilityNowMs, config.type, loading, matchingFiles, pageItems, quota, sectionLoading]);
 
   const handleAvailabilityChange = useCallback(
     (value: AvailabilityFilter) => {
@@ -520,10 +522,11 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
       const resetQuota = config.resetQuota;
       if (!resetQuota) return;
       if (disabled || file.disabled) return;
-      if (quota[file.name]?.status === 'loading') return;
-      if (resettingQuotaName === file.name) return;
+      const cacheKey = getQuotaCacheKey(file);
+      if (quota[cacheKey]?.status === 'loading') return;
+      if (resettingQuotaName === cacheKey) return;
 
-      const fileQuota = quota[file.name];
+      const fileQuota = quota[cacheKey];
       if (config.canResetQuota && !config.canResetQuota(fileQuota)) return;
       const resetCount = Math.max(
         0,
@@ -545,7 +548,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
         variant: 'primary',
         onConfirm: async () => {
           const cacheGeneration = captureQuotaCacheGeneration();
-          setResettingQuotaName(file.name);
+          setResettingQuotaName(cacheKey);
           try {
             const data = await resetQuota(file, t);
             const now = new Date();
@@ -553,7 +556,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
             const committed = commitIfQuotaCacheCurrent(cacheGeneration, () => {
               setQuota((prev) => ({
                 ...prev,
-                [file.name]: {
+                [cacheKey]: {
                   ...(successState as Record<string, unknown>),
                   refreshedAt: now.toISOString(),
                   refreshedAtMs: now.getTime(),
@@ -571,7 +574,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
               );
             });
           } finally {
-            setResettingQuotaName((current) => (current === file.name ? null : current));
+            setResettingQuotaName((current) => (current === cacheKey ? null : current));
           }
         },
       });
@@ -752,8 +755,9 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
               </div>
               {pageItems.map((item) => {
                 const authIndex = resolveAuthIndex(item);
-                const itemQuota = quota[item.name];
-                const isResettingQuota = resettingQuotaName === item.name;
+                const itemQuota = quota[getQuotaCacheKey(item)];
+                const itemCacheKey = itemKey(item);
+                const isResettingQuota = resettingQuotaName === itemCacheKey;
                 const canUseQuotaAction =
                   !disabled && !item.disabled && itemQuota?.status !== 'loading' && !sectionLoading;
                 const showResetQuotaAction =
@@ -793,7 +797,7 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
 
                 return (
                   <QuotaCard
-                    key={item.name}
+                    key={itemCacheKey}
                     item={item}
                     quota={itemQuota}
                     resolvedTheme={resolvedTheme}

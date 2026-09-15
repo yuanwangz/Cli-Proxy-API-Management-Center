@@ -105,4 +105,17 @@ describe('auth-files response normalization', () => {
     expect(result.files[0]?.account).toBe('sk-live-abcd');
     expect(result.files[0]?.accountType).toBeUndefined();
   });
+
+  test('retains same-name credentials when auth indexes differ', () => {
+    const result = normalizeAuthFilesResponse(
+      responseWithRawFiles([
+        { name: 'shared.json', provider: 'devin', auth_index: 'auth-a', email: 'a@example.com' },
+        { name: 'shared.json', provider: 'devin', auth_index: 'auth-b', email: 'b@example.com' },
+      ])
+    );
+
+    expect(result.files).toHaveLength(2);
+    expect(result.files.map((file) => file.authIndex)).toEqual(['auth-a', 'auth-b']);
+    expect(result.files.map((file) => file.email)).toEqual(['a@example.com', 'b@example.com']);
+  });
 });

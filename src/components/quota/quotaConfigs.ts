@@ -18,16 +18,12 @@ import type {
   ClaudeUsagePayload,
   CodexRateLimitInfo,
   CodexRateLimitResetCredit,
-  GeminiCliCodeAssistPayload,
-  GeminiCliCredits,
-  GeminiCliParsedBucket,
-  GeminiCliQuotaBucketState,
-  GeminiCliQuotaState,
-  GeminiCliUserTier,
   CodexQuotaState,
   CodexUsageWindow,
   CodexQuotaWindow,
   CodexUsagePayload,
+  DevinQuotaData,
+  DevinQuotaState,
   KimiQuotaRow,
   KimiQuotaState,
   XaiBillingSummary,
@@ -40,7 +36,6 @@ import {
   getApiCallErrorMessage,
   type AntigravitySubscriptionSummary,
 } from '@/services/api';
-import { useQuotaStore } from '@/stores';
 import {
   ANTIGRAVITY_QUOTA_URLS,
   ANTIGRAVITY_REQUEST_HEADERS,
@@ -49,9 +44,6 @@ import {
   CLAUDE_REQUEST_HEADERS,
   CLAUDE_USAGE_WINDOW_KEYS,
   CODEX_RATE_LIMIT_RESET_CREDITS_URL,
-  GEMINI_CLI_QUOTA_URL,
-  GEMINI_CLI_CODE_ASSIST_URL,
-  GEMINI_CLI_REQUEST_HEADERS,
   CODEX_RATE_LIMIT_RESET_CREDITS_CONSUME_URL,
   CODEX_USAGE_URL,
   CODEX_REQUEST_HEADERS,
@@ -68,14 +60,6 @@ import {
   normalizePlanType,
   normalizeStringValue,
   normalizeCodexResetCreditsPayload,
-  isRuntimeOnlyAuthFile,
-  isGeminiCliFile,
-  buildGeminiCliQuotaBuckets,
-  resolveGeminiCliProjectId,
-  parseGeminiCliCodeAssistPayload,
-  parseGeminiCliQuotaPayload,
-  normalizeQuotaFraction,
-  normalizeGeminiCliModelId,
   parseAntigravityPayload,
   parseClaudeUsagePayload,
   parseCodexUsagePayload,
@@ -107,12 +91,13 @@ import {
 } from '@/utils/quota';
 import { normalizeAuthIndex } from '@/utils/authIndex';
 import { formatDateTimeValue } from '@/utils/format';
+import { DEVIN_CONFIG as DEVIN_PROVIDER_CONFIG } from '@/features/quota/providers/devin/data';
 import type { QuotaRenderHelpers } from './QuotaCard';
 import styles from '@/pages/QuotaPage.module.scss';
 
 type QuotaUpdater<T> = T | ((prev: T) => T);
 
-type QuotaType = 'antigravity' | 'claude' | 'codex' | 'gemini-cli' | 'kimi' | 'xai';
+type QuotaType = 'antigravity' | 'claude' | 'codex' | 'devin' | 'kimi' | 'xai';
 
 type AntigravityQuotaData = {
   groups: AntigravityQuotaGroup[];
@@ -139,16 +124,6 @@ const QUOTA_PROGRESS_HIGH_THRESHOLD = 70;
 const QUOTA_PROGRESS_MEDIUM_THRESHOLD = 30;
 const INLINE_QUOTA_ITEM_LIMIT = 3;
 const PREMIUM_CODEX_PLAN_TYPES = new Set(['pro', 'prolite', 'pro-lite', 'pro_lite']);
-const geminiCliSupplementaryRequestIds = new Map<string, number>();
-const geminiCliSupplementaryCache = new Map<
-  string,
-  {
-    requestId: number;
-    tierLabel: string | null;
-    tierId: string | null;
-    creditBalance: number | null;
-  }
->();
 const CODEX_RESET_CREDITS_REQUEST_TIMEOUT_MS = 8000;
 const XAI_PAID_HEALTH_REQUEST_TIMEOUT_MS = 15000;
 
@@ -156,13 +131,13 @@ export interface QuotaStore {
   antigravityQuota: Record<string, AntigravityQuotaState>;
   claudeQuota: Record<string, ClaudeQuotaState>;
   codexQuota: Record<string, CodexQuotaState>;
-  geminiCliQuota: Record<string, GeminiCliQuotaState>;
+  devinQuota: Record<string, DevinQuotaState>;
   kimiQuota: Record<string, KimiQuotaState>;
   xaiQuota: Record<string, XaiQuotaState>;
   setAntigravityQuota: (updater: QuotaUpdater<Record<string, AntigravityQuotaState>>) => void;
   setClaudeQuota: (updater: QuotaUpdater<Record<string, ClaudeQuotaState>>) => void;
   setCodexQuota: (updater: QuotaUpdater<Record<string, CodexQuotaState>>) => void;
-  setGeminiCliQuota: (updater: QuotaUpdater<Record<string, GeminiCliQuotaState>>) => void;
+  setDevinQuota: (updater: QuotaUpdater<Record<string, DevinQuotaState>>) => void;
   setKimiQuota: (updater: QuotaUpdater<Record<string, KimiQuotaState>>) => void;
   setXaiQuota: (updater: QuotaUpdater<Record<string, XaiQuotaState>>) => void;
   clearQuotaCache: () => void;
@@ -177,7 +152,13 @@ export interface QuotaConfig<TState, TData> {
   resetQuota?: (file: AuthFileItem, t: TFunction) => Promise<TData>;
   canResetQuota?: (quota: TState) => boolean;
   storeSelector: (state: QuotaStore) => Record<string, TState>;
-  storeSetter: keyof QuotaStore;
+  storeSetter:
+    | 'setAntigravityQuota'
+    | 'setClaudeQuota'
+    | 'setCodexQuota'
+    | 'setDevinQuota'
+    | 'setKimiQuota'
+    | 'setXaiQuota';
   buildLoadingState: () => TState;
   buildSuccessState: (data: TData) => TState;
   buildErrorState: (message: string, status?: number) => TState;
@@ -922,251 +903,6 @@ const resolveCodexWindowLabel = (window: CodexQuotaWindow, t: TFunction): string
   return t(labelKey, labelParams);
 };
 
-const GEMINI_CLI_G1_CREDIT_TYPE = 'GOOGLE_ONE_AI';
-
-const GEMINI_CLI_TIER_LABELS: Record<string, string> = {
-  'free-tier': 'tier_free',
-  'legacy-tier': 'tier_legacy',
-  'standard-tier': 'tier_standard',
-  'g1-pro-tier': 'tier_pro',
-  'g1-ultra-tier': 'tier_ultra',
-};
-
-const resolveGeminiCliTierLabel = (
-  payload: GeminiCliCodeAssistPayload | null,
-  t: TFunction
-): string | null => {
-  if (!payload) return null;
-  const currentTier: GeminiCliUserTier | null | undefined =
-    payload.currentTier ?? payload.current_tier;
-  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
-  const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
-  if (!rawId) return null;
-  const tierId = rawId.toLowerCase();
-  const labelKey = GEMINI_CLI_TIER_LABELS[tierId];
-  return labelKey ? t(`gemini_cli_quota.${labelKey}`) : rawId;
-};
-
-const resolveGeminiCliTierId = (payload: GeminiCliCodeAssistPayload | null): string | null => {
-  if (!payload) return null;
-  const currentTier: GeminiCliUserTier | null | undefined =
-    payload.currentTier ?? payload.current_tier;
-  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
-  const rawId = normalizeStringValue(paidTier?.id) ?? normalizeStringValue(currentTier?.id);
-  return rawId ? rawId.toLowerCase() : null;
-};
-
-const resolveGeminiCliCreditBalance = (
-  payload: GeminiCliCodeAssistPayload | null
-): number | null => {
-  if (!payload) return null;
-  const paidTier: GeminiCliUserTier | null | undefined = payload.paidTier ?? payload.paid_tier;
-  const currentTier: GeminiCliUserTier | null | undefined =
-    payload.currentTier ?? payload.current_tier;
-  const tier = paidTier ?? currentTier;
-  if (!tier) return null;
-  const credits: GeminiCliCredits[] = tier.availableCredits ?? tier.available_credits ?? [];
-  let total = 0;
-  let found = false;
-  for (const credit of credits) {
-    const creditType = normalizeStringValue(credit.creditType ?? credit.credit_type);
-    if (creditType !== GEMINI_CLI_G1_CREDIT_TYPE) continue;
-    const amount = normalizeNumberValue(credit.creditAmount ?? credit.credit_amount);
-    if (amount !== null) {
-      total += amount;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const fetchGeminiCliCodeAssist = async (
-  authIndex: string,
-  projectId: string,
-  t: TFunction
-): Promise<{ tierLabel: string | null; tierId: string | null; creditBalance: number | null }> => {
-  try {
-    const result = await apiCallApi.request({
-      authIndex,
-      method: 'POST',
-      url: GEMINI_CLI_CODE_ASSIST_URL,
-      header: { ...GEMINI_CLI_REQUEST_HEADERS },
-      data: JSON.stringify({
-        cloudaicompanionProject: projectId,
-        metadata: {
-          ideType: 'IDE_UNSPECIFIED',
-          platform: 'PLATFORM_UNSPECIFIED',
-          pluginType: 'GEMINI',
-          duetProject: projectId,
-        },
-      }),
-    });
-
-    if (result.statusCode < 200 || result.statusCode >= 300) {
-      return { tierLabel: null, tierId: null, creditBalance: null };
-    }
-
-    const payload = parseGeminiCliCodeAssistPayload(result.body ?? result.bodyText);
-    return {
-      tierLabel: resolveGeminiCliTierLabel(payload, t),
-      tierId: resolveGeminiCliTierId(payload),
-      creditBalance: resolveGeminiCliCreditBalance(payload),
-    };
-  } catch {
-    return { tierLabel: null, tierId: null, creditBalance: null };
-  }
-};
-
-const readGeminiCliSupplementarySnapshot = (
-  fileName: string,
-  requestId: number
-): { tierLabel: string | null; tierId: string | null; creditBalance: number | null } => {
-  const cached = geminiCliSupplementaryCache.get(fileName);
-  if (!cached || cached.requestId !== requestId) {
-    return { tierLabel: null, tierId: null, creditBalance: null };
-  }
-
-  return {
-    tierLabel: cached.tierLabel,
-    tierId: cached.tierId,
-    creditBalance: cached.creditBalance,
-  };
-};
-
-const scheduleGeminiCliSupplementaryRefresh = (
-  fileName: string,
-  authIndex: string,
-  projectId: string,
-  t: TFunction
-): number => {
-  const requestId = (geminiCliSupplementaryRequestIds.get(fileName) ?? 0) + 1;
-  geminiCliSupplementaryRequestIds.set(fileName, requestId);
-  geminiCliSupplementaryCache.delete(fileName);
-
-  void (async () => {
-    const supplementary = await fetchGeminiCliCodeAssist(authIndex, projectId, t);
-    if (geminiCliSupplementaryRequestIds.get(fileName) !== requestId) {
-      return;
-    }
-
-    geminiCliSupplementaryCache.set(fileName, { requestId, ...supplementary });
-
-    useQuotaStore.getState().setGeminiCliQuota((prev) => {
-      const current = prev[fileName];
-      if (!current || current.status !== 'success') {
-        return prev;
-      }
-
-      if (
-        current.tierLabel === supplementary.tierLabel &&
-        current.tierId === supplementary.tierId &&
-        current.creditBalance === supplementary.creditBalance
-      ) {
-        return prev;
-      }
-
-      return {
-        ...prev,
-        [fileName]: {
-          ...current,
-          tierLabel: supplementary.tierLabel,
-          tierId: supplementary.tierId,
-          creditBalance: supplementary.creditBalance,
-        },
-      };
-    });
-  })();
-
-  return requestId;
-};
-
-const fetchGeminiCliQuota = async (
-  file: AuthFileItem,
-  t: TFunction
-): Promise<{
-  fileName: string;
-  supplementaryRequestId: number;
-  buckets: GeminiCliQuotaBucketState[];
-  tierLabel: string | null;
-  tierId: string | null;
-  creditBalance: number | null;
-}> => {
-  const rawAuthIndex = file['auth_index'] ?? file.authIndex;
-  const authIndex = normalizeAuthIndex(rawAuthIndex);
-  if (!authIndex) {
-    throw new Error(t('gemini_cli_quota.missing_auth_index'));
-  }
-
-  const projectId = resolveGeminiCliProjectId(file);
-  if (!projectId) {
-    throw new Error(t('gemini_cli_quota.missing_project_id'));
-  }
-
-  const quotaResponse = await apiCallApi.request({
-    authIndex,
-    method: 'POST',
-    url: GEMINI_CLI_QUOTA_URL,
-    header: { ...GEMINI_CLI_REQUEST_HEADERS },
-    data: JSON.stringify({ project: projectId }),
-  });
-  if (quotaResponse.statusCode < 200 || quotaResponse.statusCode >= 300) {
-    throw createStatusError(getApiCallErrorMessage(quotaResponse), quotaResponse.statusCode);
-  }
-
-  const payload = parseGeminiCliQuotaPayload(quotaResponse.body ?? quotaResponse.bodyText);
-  const buckets = Array.isArray(payload?.buckets) ? payload?.buckets : [];
-
-  const parsedBuckets = buckets
-    .map((bucket) => {
-      const modelId = normalizeGeminiCliModelId(bucket.modelId ?? bucket.model_id);
-      if (!modelId) return null;
-      const tokenType = normalizeStringValue(bucket.tokenType ?? bucket.token_type);
-      const remainingFractionRaw = normalizeQuotaFraction(
-        bucket.remainingFraction ?? bucket.remaining_fraction
-      );
-      const remainingAmount = normalizeNumberValue(
-        bucket.remainingAmount ?? bucket.remaining_amount
-      );
-      const resetTime = normalizeStringValue(bucket.resetTime ?? bucket.reset_time) ?? undefined;
-      let fallbackFraction: number | null = null;
-      if (remainingAmount !== null) {
-        fallbackFraction = remainingAmount <= 0 ? 0 : null;
-      } else if (resetTime) {
-        fallbackFraction = 0;
-      }
-      const remainingFraction = remainingFractionRaw ?? fallbackFraction;
-      return {
-        modelId,
-        tokenType,
-        remainingFraction,
-        remainingAmount,
-        resetTime,
-      };
-    })
-    .filter((bucket): bucket is GeminiCliParsedBucket => bucket !== null);
-
-  const builtBuckets = buildGeminiCliQuotaBuckets(parsedBuckets);
-  const supplementaryRequestId = scheduleGeminiCliSupplementaryRefresh(
-    file.name,
-    authIndex,
-    projectId,
-    t
-  );
-  const supplementarySnapshot = readGeminiCliSupplementarySnapshot(
-    file.name,
-    supplementaryRequestId
-  );
-
-  return {
-    fileName: file.name,
-    supplementaryRequestId,
-    buckets: builtBuckets,
-    tierLabel: supplementarySnapshot.tierLabel,
-    tierId: supplementarySnapshot.tierId,
-    creditBalance: supplementarySnapshot.creditBalance,
-  };
-};
-
 const formatAntigravityDuration = (t: TFunction, deltaMs: number): string => {
   const totalMinutes = Math.max(1, Math.ceil(deltaMs / 60000));
   const days = Math.floor(totalMinutes / 1440);
@@ -1564,122 +1300,6 @@ const renderCodexItems = (
   return nodes;
 };
 
-const renderGeminiCliItems = (
-  quota: GeminiCliQuotaState,
-  t: TFunction,
-  helpers: QuotaRenderHelpers
-): ReactNode => {
-  const { styles: styleMap, QuotaProgressBar } = helpers;
-  const { createElement: h, Fragment } = React;
-  const buckets = quota.buckets ?? [];
-  const creditBalance = quota.creditBalance ?? null;
-  const nodes: ReactNode[] = [];
-
-  if (creditBalance !== null) {
-    nodes.push(
-      h(
-        'div',
-        { key: 'credits', className: styleMap.codexPlan },
-        h('span', { className: styleMap.codexPlanLabel }, t('gemini_cli_quota.credit_label')),
-        h(
-          'span',
-          { className: styleMap.codexPlanValue },
-          t('gemini_cli_quota.credit_amount', { count: creditBalance })
-        )
-      )
-    );
-  }
-
-  if (buckets.length === 0) {
-    nodes.push(
-      h(
-        'div',
-        { key: 'empty', className: styleMap.quotaMessage },
-        t('gemini_cli_quota.empty_buckets')
-      )
-    );
-    return h(Fragment, null, ...nodes);
-  }
-
-  const bucketSlots = Math.max(1, INLINE_QUOTA_ITEM_LIMIT - nodes.length);
-  const visibleBuckets = buckets.slice(0, bucketSlots);
-  const hiddenBuckets = buckets.slice(bucketSlots);
-  const popoverItems = buckets.map((bucket) => {
-    const fraction = typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
-    const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
-    const percent = clamped === null ? null : Math.round(clamped * 100);
-    const percentLabel = percent === null ? '--' : `${percent}%`;
-    const amountLabel =
-      bucket.remainingAmount === null || bucket.remainingAmount === undefined
-        ? null
-        : t('gemini_cli_quota.remaining_amount', {
-            count: bucket.remainingAmount,
-          });
-    const titleBase =
-      bucket.modelIds && bucket.modelIds.length > 0 ? bucket.modelIds.join(', ') : bucket.label;
-    const title = bucket.tokenType ? `${titleBase} (${bucket.tokenType})` : titleBase;
-    return {
-      label: bucket.label,
-      percentLabel,
-      amountLabel,
-      resetLabel: formatQuotaResetTimeFull(bucket.resetTime),
-      title,
-    };
-  });
-
-  nodes.push(
-    ...visibleBuckets.map((bucket) => {
-      const fraction =
-        typeof bucket.remainingFraction === 'number' ? bucket.remainingFraction : null;
-      const clamped = fraction === null ? null : Math.max(0, Math.min(1, fraction));
-      const percent = clamped === null ? null : Math.round(clamped * 100);
-      const percentLabel = percent === null ? '--' : `${percent}%`;
-      const remainingAmountLabel =
-        bucket.remainingAmount === null || bucket.remainingAmount === undefined
-          ? null
-          : t('gemini_cli_quota.remaining_amount', {
-              count: bucket.remainingAmount,
-            });
-      const titleBase =
-        bucket.modelIds && bucket.modelIds.length > 0 ? bucket.modelIds.join(', ') : bucket.label;
-      const title = bucket.tokenType ? `${titleBase} (${bucket.tokenType})` : titleBase;
-
-      const resetLabel = formatQuotaResetTime(bucket.resetTime);
-
-      return h(
-        'div',
-        {
-          key: bucket.id,
-          className: `${styleMap.quotaRow} ${buckets.length > 1 ? styleMap.quotaRowCondensed : ''}`,
-        },
-        h(
-          'div',
-          { className: styleMap.quotaRowHeader },
-          h('span', { className: styleMap.quotaModel, title }, bucket.label),
-          h(
-            'div',
-            { className: styleMap.quotaMeta },
-            h('span', { className: styleMap.quotaPercent }, percentLabel),
-            remainingAmountLabel
-              ? h('span', { className: styleMap.quotaAmount }, remainingAmountLabel)
-              : null,
-            h('span', { className: styleMap.quotaReset }, resetLabel)
-          )
-        ),
-        h(QuotaProgressBar, {
-          percent,
-          highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
-          mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
-        })
-      );
-    })
-  );
-
-  nodes.push(quotaOverflowNode(hiddenBuckets.length, popoverItems, t, helpers));
-
-  return h(Fragment, null, ...nodes);
-};
-
 const buildClaudeQuotaWindows = (
   payload: ClaudeUsagePayload,
   t: TFunction
@@ -1896,6 +1516,92 @@ const renderClaudeItems = (
   return h(Fragment, null, ...nodes);
 };
 
+const renderDevinItems = (
+  quota: DevinQuotaState,
+  t: TFunction,
+  helpers: QuotaRenderHelpers
+): ReactNode => {
+  const { styles: styleMap, QuotaProgressBar } = helpers;
+  const { createElement: h, Fragment } = React;
+  const nodes: ReactNode[] = [];
+
+  if (quota.plan || quota.planEndMs) {
+    nodes.push(
+      h(
+        'div',
+        { key: 'plan', className: styleMap.codexPlan },
+        quota.plan
+          ? h(
+              'span',
+              { className: styleMap.codexPlanItem },
+              h('span', { className: styleMap.codexPlanLabel }, t('devin_quota.plan_label')),
+              h('span', { className: styleMap.codexPlanValue }, quota.plan)
+            )
+          : null,
+        quota.planEndMs
+          ? h(
+              'span',
+              { className: styleMap.codexPlanItem },
+              h('span', { className: styleMap.codexPlanLabel }, t('devin_quota.plan_end')),
+              h(
+                'span',
+                { className: styleMap.codexPlanValue },
+                formatDateTimeValue(quota.planEndMs) || t('devin_quota.reset_unknown')
+              )
+            )
+          : null
+      )
+    );
+  }
+
+  if (quota.windows.length === 0) {
+    nodes.push(
+      h('div', { key: 'empty', className: styleMap.quotaMessage }, t('devin_quota.empty_data'))
+    );
+    return h(Fragment, null, ...nodes);
+  }
+
+  nodes.push(
+    ...quota.windows.map((window) => {
+      const remaining =
+        window.remainingPercent === null
+          ? null
+          : Math.max(0, Math.min(100, window.remainingPercent));
+      const resetLabel = window.resetAtMs
+        ? formatDateTimeValue(window.resetAtMs) || t('devin_quota.reset_unknown')
+        : t('devin_quota.reset_unknown');
+      const label = window.label || t(`devin_quota.${window.id}`);
+
+      return h(
+        'div',
+        { key: window.id, className: styleMap.quotaRow },
+        h(
+          'div',
+          { className: styleMap.quotaRowHeader },
+          h('span', { className: styleMap.quotaModel }, label),
+          h(
+            'div',
+            { className: styleMap.quotaMeta },
+            h(
+              'span',
+              { className: styleMap.quotaPercent },
+              remaining === null ? t('devin_quota.unavailable') : `${Math.round(remaining)}%`
+            ),
+            h('span', { className: styleMap.quotaReset }, resetLabel)
+          )
+        ),
+        h(QuotaProgressBar, {
+          percent: remaining,
+          highThreshold: QUOTA_PROGRESS_HIGH_THRESHOLD,
+          mediumThreshold: QUOTA_PROGRESS_MEDIUM_THRESHOLD,
+        })
+      );
+    })
+  );
+
+  return h(Fragment, null, ...nodes);
+};
+
 export const CLAUDE_CONFIG: QuotaConfig<
   ClaudeQuotaState,
   { windows: ClaudeQuotaWindow[]; extraUsage?: ClaudeExtraUsage | null; planType?: string | null }
@@ -1997,60 +1703,37 @@ export const CODEX_CONFIG: QuotaConfig<CodexQuotaState, CodexQuotaData> = {
   renderQuotaItems: renderCodexItems,
 };
 
-export const GEMINI_CLI_CONFIG: QuotaConfig<
-  GeminiCliQuotaState,
-  {
-    fileName: string;
-    supplementaryRequestId: number;
-    buckets: GeminiCliQuotaBucketState[];
-    tierLabel: string | null;
-    tierId: string | null;
-    creditBalance: number | null;
-  }
-> = {
-  type: 'gemini-cli',
-  i18nPrefix: 'gemini_cli_quota',
-  cardIdleMessageKey: 'quota_management.card_idle_hint',
+export const DEVIN_CONFIG: QuotaConfig<DevinQuotaState, DevinQuotaData> = {
+  type: 'devin',
+  i18nPrefix: 'devin_quota',
+  cardIdleMessageKey: 'devin_quota.idle',
   filterFn: (file) =>
-    isGeminiCliFile(file) &&
-    !isRuntimeOnlyAuthFile(file) &&
-    !isDisabledAuthFile(file) &&
-    !isArchivedAuthFile(file),
-  fetchQuota: fetchGeminiCliQuota,
-  storeSelector: (state) => state.geminiCliQuota,
-  storeSetter: 'setGeminiCliQuota',
+    DEVIN_PROVIDER_CONFIG.filterFn(file) && !isArchivedAuthFile(file),
+  fetchQuota: DEVIN_PROVIDER_CONFIG.fetchQuota,
+  storeSelector: (state) => state.devinQuota,
+  storeSetter: 'setDevinQuota',
   buildLoadingState: () => ({
     status: 'loading',
-    buckets: [],
-    tierLabel: null,
-    tierId: null,
-    creditBalance: null,
+    windows: [],
+    observedAtMs: null,
+    plan: null,
+    planStartMs: null,
+    planEndMs: null,
   }),
-  buildSuccessState: (data) => {
-    const supplementarySnapshot = readGeminiCliSupplementarySnapshot(
-      data.fileName,
-      data.supplementaryRequestId
-    );
-
-    return {
-      status: 'success',
-      buckets: data.buckets,
-      tierLabel: supplementarySnapshot.tierLabel ?? data.tierLabel,
-      tierId: supplementarySnapshot.tierId ?? data.tierId,
-      creditBalance: supplementarySnapshot.creditBalance ?? data.creditBalance,
-    };
-  },
+  buildSuccessState: (data) => ({ status: 'success', ...data }),
   buildErrorState: (message, status) => ({
     status: 'error',
-    buckets: [],
+    windows: [],
+    observedAtMs: null,
+    plan: null,
+    planStartMs: null,
+    planEndMs: null,
     error: message,
     errorStatus: status,
   }),
-  cardClassName: styles.geminiCliCard,
-  controlsClassName: styles.geminiCliControls,
-  controlClassName: styles.geminiCliControl,
-  gridClassName: styles.geminiCliGrid,
-  renderQuotaItems: renderGeminiCliItems,
+  cardClassName: styles.devinCard,
+  gridClassName: styles.devinGrid,
+  renderQuotaItems: renderDevinItems,
 };
 
 const fetchKimiQuota = async (file: AuthFileItem, t: TFunction): Promise<KimiQuotaRow[]> => {

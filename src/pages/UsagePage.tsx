@@ -671,8 +671,6 @@ function RequestDistributionPanel({ rows }: { rows: GroupRow[] }) {
 
 const providerDisplayName = (provider: string): string => {
   switch (provider) {
-    case 'gemini-cli':
-      return 'Gemini CLI';
     case 'iflow':
       return 'iFlow';
     case 'unknown':

@@ -38,6 +38,7 @@ import {
   parsePriorityValue,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 import { AuthFileTable } from '@/features/authFiles/components/AuthFileTable';
 import { AuthFilesBatchEditorModal } from '@/features/authFiles/components/AuthFilesBatchEditorModal';
 import { AuthFileModelsModal } from '@/features/authFiles/components/AuthFileModelsModal';
@@ -177,7 +178,7 @@ export function AuthFilesPage() {
   } = useAuthFilesData();
 
   const {
-    resultsByName: inspectionResults,
+    resultsByIdentity: inspectionResults,
     summary: inspectionSummary,
     running: inspectionRunning,
     progress: inspectionProgress,
@@ -481,12 +482,14 @@ export function AuthFilesPage() {
     return filesMatchingStatusFilters.filter((item) => {
       const matchSearch =
         !normalizedSearch ||
-        [item.name, item.type, item.provider].some((value) => {
-          const content = (value || '').toString();
-          return wildcardSearch
-            ? wildcardSearch.test(content)
-            : content.toLowerCase().includes(normalizedTerm);
-        });
+        [item.name, item.email, item.projectId, item['project_id'], item.type, item.provider].some(
+          (value) => {
+            const content = (value || '').toString();
+            return wildcardSearch
+              ? wildcardSearch.test(content)
+              : content.toLowerCase().includes(normalizedTerm);
+          }
+        );
       return matchSearch;
     });
   }, [filesMatchingStatusFilters, normalizedSearch, wildcardSearch]);
@@ -532,33 +535,33 @@ export function AuthFilesPage() {
     () => inspectionFiltered.filter((file) => !isRuntimeOnlyAuthFile(file)),
     [inspectionFiltered]
   );
-  const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
+  const selectedIdentityKeys = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
   const selectedHasStatusUpdating = useMemo(
-    () => selectedNames.some((name) => statusUpdating[name] === true),
-    [selectedNames, statusUpdating]
+    () => selectedIdentityKeys.some((identityKey) => statusUpdating[identityKey] === true),
+    [selectedIdentityKeys, statusUpdating]
   );
   const selectedHasArchiveUpdating = useMemo(
-    () => selectedNames.some((name) => archiveUpdating[name] === true),
-    [archiveUpdating, selectedNames]
+    () => selectedIdentityKeys.some((identityKey) => archiveUpdating[identityKey] === true),
+    [archiveUpdating, selectedIdentityKeys]
   );
   const batchStatusButtonsDisabled =
     disableControls ||
-    selectedNames.length === 0 ||
+    selectedIdentityKeys.length === 0 ||
     batchStatusUpdating ||
     batchFieldsUpdating ||
     selectedHasStatusUpdating ||
     selectedHasArchiveUpdating;
   const batchArchiveButtonsDisabled =
     disableControls ||
-    selectedNames.length === 0 ||
+    selectedIdentityKeys.length === 0 ||
     batchArchiveUpdating ||
     batchFieldsUpdating ||
     selectedHasArchiveUpdating;
   const selectedItems = useMemo(() => {
-    if (selectedNames.length === 0) return [];
-    const selectedNameSet = new Set(selectedNames);
-    return files.filter((file) => selectedNameSet.has(file.name));
-  }, [files, selectedNames]);
+    if (selectedIdentityKeys.length === 0) return [];
+    const selectedIdentitySet = new Set(selectedIdentityKeys);
+    return files.filter((file) => selectedIdentitySet.has(getAuthFileIdentityKey(file)));
+  }, [files, selectedIdentityKeys]);
   const batchEditButtonDisabled =
     disableControls ||
     selectedItems.length === 0 ||
@@ -570,24 +573,24 @@ export function AuthFilesPage() {
 
   const handleBatchEditSubmit = useCallback(
     (patch: Parameters<typeof batchPatchFields>[1], fieldCount: number) => {
-      const targetNames = [...selectedNames];
+      const targetIdentityKeys = [...selectedIdentityKeys];
       showConfirmation({
         title: t('auth_files.batch_edit_confirm_title'),
         message: t('auth_files.batch_edit_confirm', {
-          count: targetNames.length,
+          count: targetIdentityKeys.length,
           fields: fieldCount,
         }),
         variant: 'primary',
         confirmText: t('common.confirm'),
         onConfirm: async () => {
-          const result = await batchPatchFields(targetNames, patch);
+          const result = await batchPatchFields(targetIdentityKeys, patch);
           if (result && result.failedNames.length === 0) {
             setBatchEditorOpen(false);
           }
         },
       });
     },
-    [batchPatchFields, selectedNames, showConfirmation, t]
+    [batchPatchFields, selectedIdentityKeys, showConfirmation, t]
   );
   const handleInspectionStatusFilterChange = useCallback((value: string) => {
     if (!isAuthFilesInspectionStatusFilter(value)) return;
@@ -654,7 +657,8 @@ export function AuthFilesPage() {
 
   const handleInspectionAction = useCallback(
     (file: (typeof files)[number], result: CredentialInspectionResult) => {
-      if (disableControls || inspectionActionRunning[file.name]) return;
+      const identityKey = getAuthFileIdentityKey(file);
+      if (disableControls || inspectionActionRunning[identityKey]) return;
 
       if (result.action === 'reauth') {
         navigate('/oauth');
@@ -665,7 +669,7 @@ export function AuthFilesPage() {
         return;
       }
       if (result.action === 'delete') {
-        handleDelete(file.name);
+        handleDelete(file);
         return;
       }
       if (
@@ -684,19 +688,18 @@ export function AuthFilesPage() {
           action: t(`auth_files.inspection_action_${result.action}`),
         }),
         onConfirm: async () => {
-          const authIndex = resolveCredentialAuthIndex(file) || undefined;
-          setInspectionActionRunning((current) => ({ ...current, [file.name]: true }));
+          setInspectionActionRunning((current) => ({ ...current, [identityKey]: true }));
           let nextFile = { ...file };
           try {
             if (result.action === 'unarchive' || result.action === 'restore') {
-              await authFilesApi.setArchived(file.name, false, authIndex);
+              await authFilesApi.setArchived(file, false);
               nextFile = { ...nextFile, archived: false };
             }
             if (result.action === 'enable' || result.action === 'restore') {
-              await authFilesApi.setStatus(file.name, false, authIndex);
+              await authFilesApi.setStatus(file, false);
               nextFile = { ...nextFile, disabled: false };
             } else if (result.action === 'disable') {
-              await authFilesApi.setStatus(file.name, true, authIndex);
+              await authFilesApi.setStatus(file, true);
               nextFile = { ...nextFile, disabled: true };
             }
 
@@ -719,7 +722,7 @@ export function AuthFilesPage() {
           } finally {
             setInspectionActionRunning((current) => {
               const next = { ...current };
-              delete next[file.name];
+              delete next[identityKey];
               return next;
             });
           }
@@ -1478,15 +1481,15 @@ export function AuthFilesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void batchDownload(selectedNames)}
-                    disabled={disableControls || selectedNames.length === 0}
+                    onClick={() => void batchDownload(selectedIdentityKeys)}
+                    disabled={disableControls || selectedIdentityKeys.length === 0}
                   >
                     {t('auth_files.batch_download')}
                   </Button>
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void batchSetArchived(selectedNames, true)}
+                    onClick={() => void batchSetArchived(selectedIdentityKeys, true)}
                     disabled={batchArchiveButtonsDisabled}
                   >
                     {t('auth_files.batch_archive')}
@@ -1494,14 +1497,14 @@ export function AuthFilesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void batchSetArchived(selectedNames, false)}
+                    onClick={() => void batchSetArchived(selectedIdentityKeys, false)}
                     disabled={batchArchiveButtonsDisabled}
                   >
                     {t('auth_files.batch_unarchive')}
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => void batchSetStatus(selectedNames, true)}
+                    onClick={() => void batchSetStatus(selectedIdentityKeys, true)}
                     disabled={batchStatusButtonsDisabled}
                   >
                     {t('auth_files.batch_enable')}
@@ -1509,7 +1512,7 @@ export function AuthFilesPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => batchSetStatus(selectedNames, false)}
+                    onClick={() => batchSetStatus(selectedIdentityKeys, false)}
                     disabled={batchStatusButtonsDisabled}
                   >
                     {t('auth_files.batch_disable')}
@@ -1517,8 +1520,8 @@ export function AuthFilesPage() {
                   <Button
                     variant="danger"
                     size="sm"
-                    onClick={() => batchDelete(selectedNames)}
-                    disabled={disableControls || selectedNames.length === 0}
+                    onClick={() => batchDelete(selectedIdentityKeys)}
+                    disabled={disableControls || selectedIdentityKeys.length === 0}
                   >
                     {t('common.delete')}
                   </Button>

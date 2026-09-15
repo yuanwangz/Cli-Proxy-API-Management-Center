@@ -12,17 +12,21 @@ import { copyToClipboard } from '@/utils/clipboard';
 import { getErrorMessage, isRecord } from '@/utils/helpers';
 import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 import { getPluginTitle, resolvePluginAssetURL } from '@/features/plugins/pluginResources';
+import { getKimiAffiliateUrl } from '@/features/providers/kimi';
 import type { PluginListEntry } from '@/types';
+import { createOAuthAttempts, type OAuthAttempt } from './oauthAttempts';
+import { validateDevinCallback } from './devinOAuth';
 import styles from './OAuthPage.module.scss';
 import iconCodex from '@/assets/icons/codex.svg';
 import iconClaude from '@/assets/icons/claude.svg';
 import iconAntigravity from '@/assets/icons/antigravity.svg';
-import iconGemini from '@/assets/icons/gemini.svg';
 import iconKimiLight from '@/assets/icons/kimi-light.svg';
 import iconKimiDark from '@/assets/icons/kimi-dark.svg';
 import iconVertex from '@/assets/icons/vertex.svg';
 import iconGrok from '@/assets/icons/grok.svg';
 import iconGrokDark from '@/assets/icons/grok-dark.svg';
+import iconDevin from '@/assets/icons/devin.svg';
+import iconDevinDark from '@/assets/icons/devin-dark.svg';
 
 interface ProviderState {
   url?: string;
@@ -30,8 +34,8 @@ interface ProviderState {
   status?: 'idle' | 'waiting' | 'success' | 'error';
   error?: string;
   polling?: boolean;
-  projectId?: string;
-  projectIdError?: string;
+  cancelling?: boolean;
+  cancelError?: string;
   callbackUrl?: string;
   callbackSubmitting?: boolean;
   callbackStatus?: 'success' | 'error';
@@ -102,28 +106,21 @@ const PROVIDERS: BuiltInOAuthProviderCard[] = [
   },
   {
     kind: 'builtin',
-    id: 'gemini-cli',
-    titleKey: 'auth_login.gemini_cli_oauth_title',
-    icon: iconGemini,
-  },
-  {
-    kind: 'builtin',
-    id: 'kimi',
-    titleKey: 'auth_login.kimi_oauth_title',
-    icon: { light: iconKimiLight, dark: iconKimiDark },
-  },
-  {
-    kind: 'builtin',
     id: 'xai',
     titleKey: 'auth_login.xai_oauth_title',
     icon: { light: iconGrok, dark: iconGrokDark },
   },
+  {
+    kind: 'builtin',
+    id: 'devin',
+    titleKey: 'auth_login.devin_oauth_title',
+    icon: { light: iconDevin, dark: iconDevinDark },
+  },
 ];
 
 const BUILTIN_PROVIDER_IDS = new Set<string>(PROVIDERS.map((provider) => provider.id));
-const CALLBACK_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai']);
+const CALLBACK_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'xai', 'devin']);
 const XAI_CALLBACK_URL = 'http://127.0.0.1:56121/callback';
-const KIMI_SIGN_UP_URL = 'https://www.kimi.com/code/?aff=cliproxyapi';
 const SUCCESS_RESET_DELAY_MS = 5000;
 const getProviderI18nPrefix = (provider: string) => provider.replace('-', '_');
 const getAuthKey = (provider: string, suffix: string) =>
@@ -255,7 +252,7 @@ const resolveCallbackUrl = (provider: string, input: string, state?: string): st
 };
 
 export function OAuthPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const apiBase = useAuthStore((state) => state.apiBase);
   const { showNotification } = useNotificationStore();
@@ -267,23 +264,33 @@ export function OAuthPage() {
     location: '',
     loading: false,
   });
-  const pollingTimers = useRef<Partial<Record<string, number>>>({});
-  const successResetTimers = useRef<Partial<Record<string, number>>>({});
+  const attempts = useRef(
+    createOAuthAttempts({
+      setTimeout: (callback, delay) => window.setTimeout(callback, delay),
+      clearTimeout: (timer) => window.clearTimeout(timer),
+    })
+  );
   const vertexFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clearTimers = useCallback(() => {
-    Object.values(pollingTimers.current).forEach((timer) => {
-      if (timer !== undefined) window.clearInterval(timer);
-    });
-    Object.values(successResetTimers.current).forEach((timer) => {
-      if (timer !== undefined) window.clearTimeout(timer);
-    });
-    pollingTimers.current = {};
-    successResetTimers.current = {};
+    attempts.current.invalidateAll();
   }, []);
 
   useEffect(() => {
+    // Invalidate synchronously on connection changes, including a new key on
+    // the same server. Never send cleanup requests through the new connection.
+    const unsubscribe = useAuthStore.subscribe((current, previous) => {
+      if (
+        current.apiBase !== previous.apiBase ||
+        current.managementKey !== previous.managementKey ||
+        current.isAuthenticated !== previous.isAuthenticated
+      ) {
+        clearTimers();
+        setStates({});
+      }
+    });
     return () => {
+      unsubscribe();
       clearTimers();
     };
   }, [clearTimers]);
@@ -338,45 +345,18 @@ export function OAuthPage() {
     }));
   };
 
-  const clearPollingTimer = (provider: string) => {
-    const timer = pollingTimers.current[provider];
-    if (timer !== undefined) {
-      window.clearInterval(timer);
-      delete pollingTimers.current[provider];
-    }
-  };
-
-  const clearSuccessResetTimer = (provider: string) => {
-    const timer = successResetTimers.current[provider];
-    if (timer !== undefined) {
-      window.clearTimeout(timer);
-      delete successResetTimers.current[provider];
-    }
-  };
-
-  const clearProviderTimers = (provider: string) => {
-    clearPollingTimer(provider);
-    clearSuccessResetTimer(provider);
-  };
-
   const resetProviderAttempt = (provider: string) => {
-    clearProviderTimers(provider);
+    attempts.current.get(provider)?.invalidate();
     setStates((prev) => {
-      const current = prev[provider] ?? {};
-      const next: ProviderState = {};
-      if (provider === 'gemini-cli' && current.projectId !== undefined) {
-        next.projectId = current.projectId;
-      }
       return {
         ...prev,
-        [provider]: next,
+        [provider]: {},
       };
     });
   };
 
   const completeProviderAuth = (provider: string) => {
-    clearPollingTimer(provider);
-    clearSuccessResetTimer(provider);
+    const resetAttempt = attempts.current.begin(provider);
     notifyAuthFilesChanged();
     updateProviderState(provider, {
       url: undefined,
@@ -384,74 +364,116 @@ export function OAuthPage() {
       status: 'success',
       error: undefined,
       polling: false,
+      cancelling: false,
+      cancelError: undefined,
       callbackUrl: '',
       callbackSubmitting: false,
       callbackStatus: undefined,
       callbackError: undefined,
     });
-    successResetTimers.current[provider] = window.setTimeout(() => {
+    resetAttempt.schedule(() => {
       resetProviderAttempt(provider);
     }, SUCCESS_RESET_DELAY_MS);
   };
 
-  const startPolling = (provider: string, state: string) => {
-    clearPollingTimer(provider);
-    const timer = window.setInterval(async () => {
-      try {
-        const res = await oauthApi.getAuthStatus(state);
+  const startPolling = (provider: string, state: string, attempt: OAuthAttempt) => {
+    attempt.poll(
+      () => oauthApi.getAuthStatus(state, attempt.signal),
+      (res) => {
         if (res.status === 'ok') {
           completeProviderAuth(provider);
           showNotification(getProviderTextByID(provider, 'oauth_status_success'), 'success');
         } else if (res.status === 'error') {
+          if (provider === 'devin') {
+            // Expired, denied and cancelled states cannot accept another callback.
+            attempt.invalidate();
+            updateProviderState(provider, {
+              url: undefined,
+              state: undefined,
+              callbackUrl: '',
+              callbackSubmitting: false,
+              callbackStatus: undefined,
+              callbackError: undefined,
+            });
+          }
           updateProviderState(provider, { status: 'error', error: res.error, polling: false });
           showNotification(
             `${getProviderTextByID(provider, 'oauth_status_error')} ${res.error || ''}`,
             'error'
           );
-          window.clearInterval(timer);
-          delete pollingTimers.current[provider];
         }
-      } catch (err: unknown) {
+        return res.status === 'wait';
+      },
+      (err) => {
         updateProviderState(provider, {
           status: 'error',
           error: getErrorMessage(err),
           polling: false,
         });
-        window.clearInterval(timer);
-        delete pollingTimers.current[provider];
+      },
+      3000
+    );
+  };
+
+  const cancelAuth = async (provider: string) => {
+    const state = states[provider]?.state;
+    if (provider !== 'devin' || !state || states[provider]?.cancelling) return;
+    // Replace the attempt before DELETE so late polls/callback submissions cannot
+    // overwrite the cancellation result or a subsequent login.
+    const attempt = attempts.current.begin(provider);
+    updateProviderState(provider, {
+      cancelling: true,
+      cancelError: undefined,
+      polling: true,
+      callbackSubmitting: false,
+      callbackStatus: undefined,
+      callbackError: undefined,
+    });
+    try {
+      const result = await oauthApi.cancelSession(state, attempt.signal);
+      if (!attempt.isCurrent()) return;
+      if (result.cancelled) {
+        resetProviderAttempt(provider);
+        showNotification(t('auth_login.devin_oauth_cancelled'), 'success');
+        return;
       }
-    }, 3000);
-    pollingTimers.current[provider] = timer;
+      // A completed or expired session returns cancelled=false. Read its real
+      // status rather than claiming cancellation or losing a completed login.
+    } catch (err: unknown) {
+      if (!attempt.isCurrent()) return;
+      const message = getErrorMessage(err);
+      updateProviderState(provider, { cancelError: message });
+      showNotification(`${t('auth_login.devin_oauth_cancel_error')} ${message}`, 'error');
+    }
+    updateProviderState(provider, {
+      cancelling: false,
+      status: 'waiting',
+      error: undefined,
+    });
+    startPolling(provider, state, attempt);
   };
 
   const startAuth = async (provider: string) => {
-    clearProviderTimers(provider);
-    const geminiState = provider === 'gemini-cli' ? states[provider] : undefined;
-    const rawProjectId = provider === 'gemini-cli' ? (geminiState?.projectId || '').trim() : '';
-    // Leave blank to auto-select the first available project; enter ALL to fetch all projects.
-    const projectId = rawProjectId
-      ? rawProjectId.toUpperCase() === 'ALL'
-        ? 'ALL'
-        : rawProjectId
-      : undefined;
-    if (provider === 'gemini-cli') {
-      updateProviderState(provider, { projectIdError: undefined });
-    }
+    // A network error can stop polling while the server is still waiting. Require
+    // explicit cancellation before replacing that Devin session.
+    if (provider === 'devin' && states[provider]?.state) return;
+    const attempt = attempts.current.begin(provider);
     updateProviderState(provider, {
       url: undefined,
       state: undefined,
       status: 'waiting',
       polling: true,
+      cancelling: false,
+      cancelError: undefined,
       error: undefined,
       callbackStatus: undefined,
       callbackError: undefined,
       callbackUrl: '',
+      callbackSubmitting: false,
     });
     try {
-      const res = await oauthApi.startAuth(
-        provider,
-        provider === 'gemini-cli' ? { projectId: projectId || undefined } : undefined
-      );
+      const res = await oauthApi.startAuth(provider, attempt.signal);
+      if (!attempt.isCurrent()) return;
       if (!res.state) {
         const message = t('auth_login.missing_state');
         updateProviderState(provider, {
@@ -470,8 +492,9 @@ export function OAuthPage() {
         status: 'waiting',
         polling: true,
       });
-      startPolling(provider, res.state);
+      startPolling(provider, res.state, attempt);
     } catch (err: unknown) {
+      if (!attempt.isCurrent()) return;
       const message = getErrorMessage(err);
       updateProviderState(provider, { status: 'error', error: message, polling: false });
       showNotification(
@@ -491,6 +514,14 @@ export function OAuthPage() {
   };
 
   const submitCallback = async (provider: string) => {
+    const attempt = attempts.current.get(provider);
+    if (!attempt?.isCurrent()) return;
+    if (
+      provider === 'devin' &&
+      (states[provider]?.cancelling || states[provider]?.status !== 'waiting')
+    ) {
+      return;
+    }
     const callbackInput = (states[provider]?.callbackUrl || '').trim();
     if (!callbackInput) {
       showNotification(
@@ -502,6 +533,13 @@ export function OAuthPage() {
         'warning'
       );
       return;
+    }
+    if (provider === 'devin') {
+      const callbackError = validateDevinCallback(callbackInput, states[provider]?.state);
+      if (callbackError) {
+        showNotification(t(`auth_login.devin_callback_${callbackError}`), 'warning');
+        return;
+      }
     }
     const redirectUrl = resolveCallbackUrl(provider, callbackInput, states[provider]?.state);
     if (!redirectUrl) {
@@ -519,10 +557,12 @@ export function OAuthPage() {
       callbackError: undefined,
     });
     try {
-      await oauthApi.submitCallback(provider, redirectUrl);
+      await oauthApi.submitCallback(provider, redirectUrl, attempt.signal);
+      if (!attempt.isCurrent()) return;
       updateProviderState(provider, { callbackSubmitting: false, callbackStatus: 'success' });
       showNotification(t('auth_login.oauth_callback_success'), 'success');
     } catch (err: unknown) {
+      if (!attempt.isCurrent()) return;
       const status = getErrorStatus(err);
       const message = getErrorMessage(err);
       const errorMessage =
@@ -633,7 +673,13 @@ export function OAuthPage() {
           showKimiSignUp ? (
             <div className={styles.featuredActions}>
               <Button
-                onClick={() => window.open(KIMI_SIGN_UP_URL, '_blank', 'noopener,noreferrer')}
+                onClick={() =>
+                  window.open(
+                    getKimiAffiliateUrl(i18n.resolvedLanguage ?? i18n.language),
+                    '_blank',
+                    'noopener,noreferrer'
+                  )
+                }
               >
                 {t('auth_login.kimi_sign_up_button')}
               </Button>
@@ -642,7 +688,11 @@ export function OAuthPage() {
               </Button>
             </div>
           ) : (
-            <Button onClick={() => startAuth(provider.id)} loading={state.polling}>
+            <Button
+              onClick={() => startAuth(provider.id)}
+              loading={state.polling}
+              disabled={provider.id === 'devin' && Boolean(state.state)}
+            >
               {loginButtonLabel}
             </Button>
           )
@@ -652,24 +702,6 @@ export function OAuthPage() {
           <div className={featured ? styles.featuredHint : styles.cardHint}>
             {getProviderText(provider, 'oauth_hint')}
           </div>
-          {provider.id === 'gemini-cli' && (
-            <div className={styles.geminiProjectField}>
-              <Input
-                label={t('auth_login.gemini_cli_project_id_label')}
-                hint={t('auth_login.gemini_cli_project_id_hint')}
-                value={state.projectId || ''}
-                error={state.projectIdError}
-                disabled={Boolean(state.polling)}
-                onChange={(e) =>
-                  updateProviderState(provider.id, {
-                    projectId: e.target.value,
-                    projectIdError: undefined,
-                  })
-                }
-                placeholder={t('auth_login.gemini_cli_project_id_placeholder')}
-              />
-            </div>
-          )}
           {state.url && (
             <div className={styles.authUrlBox}>
               <div className={styles.authUrlLabel}>
@@ -687,7 +719,27 @@ export function OAuthPage() {
                 >
                   {getProviderText(provider, 'open_link')}
                 </Button>
+                {provider.id === 'devin' && state.state && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => cancelAuth(provider.id)}
+                    loading={state.cancelling}
+                  >
+                    {t('auth_login.devin_oauth_cancel')}
+                  </Button>
+                )}
               </div>
+              {provider.id === 'devin' && state.state && state.status === 'error' && (
+                <div className={styles.cardHintSecondary}>
+                  {t('auth_login.devin_oauth_retry_hint')}
+                </div>
+              )}
+              {state.cancelError && (
+                <div className="status-badge error">
+                  {t('auth_login.devin_oauth_cancel_error')} {state.cancelError}
+                </div>
+              )}
             </div>
           )}
           {canSubmitCallback && (
@@ -701,8 +753,13 @@ export function OAuthPage() {
                 hint={t(
                   provider.id === 'xai'
                     ? 'auth_login.xai_callback_hint'
-                    : 'auth_login.oauth_callback_hint'
+                    : provider.id === 'devin'
+                      ? 'auth_login.devin_callback_hint'
+                      : 'auth_login.oauth_callback_hint'
                 )}
+                disabled={
+                  provider.id === 'devin' && (state.cancelling || state.status !== 'waiting')
+                }
                 value={state.callbackUrl || ''}
                 onChange={(e) =>
                   updateProviderState(provider.id, {
@@ -714,7 +771,9 @@ export function OAuthPage() {
                 placeholder={t(
                   provider.id === 'xai'
                     ? 'auth_login.xai_callback_placeholder'
-                    : 'auth_login.oauth_callback_placeholder'
+                    : provider.id === 'devin'
+                      ? 'auth_login.devin_callback_placeholder'
+                      : 'auth_login.oauth_callback_placeholder'
                 )}
               />
               <div className={styles.callbackActions}>
@@ -723,6 +782,9 @@ export function OAuthPage() {
                   size="sm"
                   onClick={() => submitCallback(provider.id)}
                   loading={state.callbackSubmitting}
+                  disabled={
+                    provider.id === 'devin' && (state.cancelling || state.status !== 'waiting')
+                  }
                 >
                   {t('auth_login.oauth_callback_button')}
                 </Button>

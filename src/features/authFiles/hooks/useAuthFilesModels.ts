@@ -4,6 +4,7 @@ import { authFilesApi } from '@/services/api';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 
 type ModelsError = 'unsupported' | null;
 
@@ -16,8 +17,8 @@ export type UseAuthFilesModelsResult = {
   modelsError: ModelsError;
   showModels: (item: AuthFileItem) => Promise<void>;
   closeModelsModal: () => void;
-  /** 文件集变更后失效缓存；不传 names 则全部清空。 */
-  invalidateModels: (names?: string[]) => void;
+  /** 文件集变更后按 identity key 失效缓存；不传则全部清空。 */
+  invalidateModels: (identityKeys?: string[]) => void;
 };
 
 export function useAuthFilesModels(): UseAuthFilesModelsResult {
@@ -41,22 +42,27 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
     setModelsLoading(false);
   }, []);
 
-  const invalidateModels = useCallback((names?: string[]) => {
-    if (!names) {
+  const invalidateModels = useCallback((identityKeys?: string[]) => {
+    if (!identityKeys) {
       modelsCacheRef.current.clear();
       modelsFileVersionRef.current.clear();
       modelsCacheVersionRef.current += 1;
       return;
     }
-    new Set(names.map((name) => name.trim()).filter(Boolean)).forEach((name) => {
-      modelsCacheRef.current.delete(name);
-      modelsFileVersionRef.current.set(name, (modelsFileVersionRef.current.get(name) ?? 0) + 1);
-    });
+    new Set(identityKeys.map((identityKey) => identityKey.trim()).filter(Boolean)).forEach(
+      (identityKey) => {
+        modelsCacheRef.current.delete(identityKey);
+        modelsFileVersionRef.current.set(
+          identityKey,
+          (modelsFileVersionRef.current.get(identityKey) ?? 0) + 1
+        );
+      }
+    );
   }, []);
 
   const showModels = useCallback(
     async (item: AuthFileItem) => {
-      const cacheKey = item.name.trim();
+      const cacheKey = getAuthFileIdentityKey(item);
       const requestId = ++activeModelsRequestIdRef.current;
 
       setModelsFileName(item.name);
@@ -81,7 +87,7 @@ export function useAuthFilesModels(): UseAuthFilesModelsResult {
 
       setModelsLoading(true);
       try {
-        const models = await authFilesApi.getModelsForAuthFile(item.name);
+        const models = await authFilesApi.getModelsForAuthFile(item);
         if (isCacheCurrent()) {
           modelsCacheRef.current.set(cacheKey, models);
           if (isRequestCurrent()) setModelsList(models);

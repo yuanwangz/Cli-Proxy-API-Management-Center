@@ -221,6 +221,7 @@
 .antigravityGrid,
 .claudeGrid,
 .codexGrid,
+.devinGrid,
 .kimiGrid,
 .xaiGrid {
   display: grid;
@@ -335,6 +336,10 @@
 
 .codexCard {
   background-image: linear-gradient(180deg, rgba(234, 231, 255, 0.18), rgba(234, 231, 255, 0));
+}
+
+.devinCard {
+  background-image: linear-gradient(180deg, rgba(224, 239, 255, 0.18), rgba(224, 239, 255, 0));
 }
 
 .kimiCard {

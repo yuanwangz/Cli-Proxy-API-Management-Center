@@ -40,6 +40,8 @@ const XAI_KEY_FIELDS = CODEX_KEY_FIELDS;
 const CLAUDE_KEY_FIELDS = [
   ...PROVIDER_COMMON_KEY_FIELDS,
   'cloak',
+  'fingerprint-profile',
+  // Keep stripping the deprecated field when a Claude entry is saved.
   'experimental-cch-signing',
 ] as const;
 const VERTEX_KEY_FIELDS = [
@@ -284,10 +286,11 @@ const extractArrayPayload = (data: unknown, key: string): unknown[] => {
   return Array.isArray(list) ? list : [];
 };
 
-const buildProviderDeleteQuery = (apiKey: string, baseUrl?: string) => {
+const buildProviderDeleteQuery = (apiKey: string, baseUrl?: string, index?: number) => {
   const params = new URLSearchParams();
   params.set('api-key', apiKey.trim());
   params.set('base-url', (baseUrl ?? '').trim());
+  if (index !== undefined) params.set('index', String(index));
   return `?${params.toString()}`;
 };
 
@@ -390,8 +393,8 @@ const serializeProviderKey = (config: ProviderKeyConfig) => {
       payload.cloak = cloakPayload;
     }
   }
-  if (config.experimentalCchSigning) {
-    payload['experimental-cch-signing'] = true;
+  if (config.fingerprintProfile?.trim()) {
+    payload['fingerprint-profile'] = config.fingerprintProfile.trim();
   }
   return payload;
 };
@@ -481,18 +484,26 @@ export const providersApi = {
       )
     ),
 
-  updateGeminiKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
+  updateGeminiKey: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: GeminiKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('gemini-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeGeminiKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, GEMINI_KEY_FIELDS)
       )
     ),
 
-  deleteGeminiKey: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteGeminiKey: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(
+      `/gemini-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`
+    ),
 
   createInteractionsKey: (config: GeminiKeyConfig) =>
     mutateLatestProviderList('interactions-api-key', (latestItems) =>
@@ -501,18 +512,26 @@ export const providersApi = {
       )
     ),
 
-  updateInteractionsKey: (apiKey: string, baseUrl: string | undefined, config: GeminiKeyConfig) =>
+  updateInteractionsKey: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: GeminiKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('interactions-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeGeminiKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, INTERACTIONS_KEY_FIELDS)
       )
     ),
 
-  deleteInteractionsKey: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/interactions-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteInteractionsKey: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(
+      `/interactions-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`
+    ),
 
   createCodexConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('codex-api-key', (latestItems) =>
@@ -521,18 +540,24 @@ export const providersApi = {
       )
     ),
 
-  updateCodexConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateCodexConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('codex-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, CODEX_KEY_FIELDS)
       )
     ),
 
-  deleteCodexConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/codex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteCodexConfig: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(`/codex-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`),
 
   createXAIConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('xai-api-key', (latestItems) =>
@@ -541,18 +566,24 @@ export const providersApi = {
       )
     ),
 
-  updateXAIConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateXAIConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('xai-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, XAI_KEY_FIELDS)
       )
     ),
 
-  deleteXAIConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/xai-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteXAIConfig: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(`/xai-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`),
 
   createClaudeConfig: (config: ProviderKeyConfig) =>
     mutateLatestProviderList('claude-api-key', (latestItems) =>
@@ -561,18 +592,24 @@ export const providersApi = {
       )
     ),
 
-  updateClaudeConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateClaudeConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('claude-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeProviderKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, CLAUDE_KEY_FIELDS)
       )
     ),
 
-  deleteClaudeConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/claude-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteClaudeConfig: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(`/claude-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`),
 
   async getVertexConfigs(): Promise<ProviderKeyConfig[]> {
     const data = await apiClient.get('/vertex-api-key');
@@ -589,18 +626,24 @@ export const providersApi = {
       )
     ),
 
-  updateVertexConfig: (apiKey: string, baseUrl: string | undefined, config: ProviderKeyConfig) =>
+  updateVertexConfig: (
+    apiKey: string,
+    baseUrl: string | undefined,
+    config: ProviderKeyConfig,
+    index?: number
+  ) =>
     mutateLatestProviderList('vertex-api-key', (latestItems) =>
       replaceLatestProviderRecord(
         latestItems,
-        (record) => matchesProviderKey(record, apiKey, baseUrl),
+        (record, recordIndex) =>
+          (index === undefined || recordIndex === index) && matchesProviderKey(record, apiKey, baseUrl),
         serializeVertexKey(config),
         (raw, payload) => mergeProviderKeyPayload(raw, payload, VERTEX_KEY_FIELDS)
       )
     ),
 
-  deleteVertexConfig: (apiKey: string, baseUrl?: string) =>
-    apiClient.delete(`/vertex-api-key${buildProviderDeleteQuery(apiKey, baseUrl)}`),
+  deleteVertexConfig: (apiKey: string, baseUrl?: string, index?: number) =>
+    apiClient.delete(`/vertex-api-key${buildProviderDeleteQuery(apiKey, baseUrl, index)}`),
 
   async getOpenAIProviders(): Promise<OpenAIProviderConfig[]> {
     const data = await apiClient.get('/openai-compatibility');

@@ -111,13 +111,12 @@ export const credentialMatchesSearch = (file: AuthFileItem, query: string): bool
     file.name,
     file.id,
     file.label,
-    file.account,
     file.email,
     file.note,
     file.type,
     file.provider,
+    file.projectId,
     file['project_id'],
-    file['account_type'],
   ];
   return fields
     .map(readCredentialText)

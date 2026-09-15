@@ -7,8 +7,7 @@ export const QUOTA_REFRESH_GRACE_MS = 1000;
 const NO_RESET_TIME = Number.POSITIVE_INFINITY;
 
 export const normalizeQuotaProvider = (value: unknown): string => {
-  const provider = normalizeOAuthProviderKey(String(value ?? ''));
-  return provider === 'geminicli' ? 'gemini-cli' : provider;
+  return normalizeOAuthProviderKey(String(value ?? ''));
 };
 
 const resetValueToMs = (value: unknown, nowMs: number): number => {
@@ -158,9 +157,6 @@ const collectProviderResetTimes = (provider: string, quota: unknown, nowMs: numb
       break;
     case 'antigravity':
       collectResetTimes({ groups: record.groups }, nowMs, times);
-      break;
-    case 'gemini-cli':
-      collectResetTimes({ buckets: record.buckets }, nowMs, times);
       break;
     case 'kimi':
       collectResetTimes({ rows: record.rows }, nowMs, times);

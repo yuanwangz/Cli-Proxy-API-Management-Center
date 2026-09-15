@@ -279,7 +279,6 @@ const usageProviderLabel = (provider: unknown): string => {
     case 'anthropic':
       return 'Anthropic';
     case 'gemini':
-    case 'gemini-cli':
     case 'vertex':
     case 'google':
       return 'Google';

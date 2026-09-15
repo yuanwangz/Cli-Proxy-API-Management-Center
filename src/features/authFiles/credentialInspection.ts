@@ -24,6 +24,8 @@ export type CredentialInspectionAction =
 export type CredentialInspectionScope = 'row' | 'page' | 'filtered' | 'selected' | 'auto';
 
 export type CredentialInspectionResult = {
+  /** Stable client identity; display uses name separately. */
+  identityKey?: string;
   name: string;
   provider: string;
   status: CredentialInspectionStatus;

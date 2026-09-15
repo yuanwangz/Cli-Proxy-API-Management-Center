@@ -12,6 +12,7 @@ import {
   useQuotaStore,
 } from '@/stores';
 import { getStatusFromError } from '@/utils/quota';
+import { getQuotaCacheKey } from '@/utils/quota/identity';
 import type { QuotaSnapshotRecord } from '@/types/quota';
 import type { QuotaConfig } from './quotaConfigs';
 
@@ -22,7 +23,7 @@ type QuotaUpdater<T> = T | ((prev: T) => T);
 type QuotaSetter<T> = (updater: QuotaUpdater<T>) => void;
 
 interface LoadQuotaResult<TState> {
-  name: string;
+  cacheKey: string;
   status: 'success' | 'error';
   state?: TState;
   error?: string;
@@ -116,7 +117,7 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
         setQuota((prev) => {
           const nextState = { ...prev };
           targets.forEach((file) => {
-            nextState[file.name] = config.buildLoadingState();
+            nextState[getQuotaCacheKey(file)] = config.buildLoadingState();
           });
           return nextState;
         });
@@ -128,14 +129,19 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
               const state = config.buildSuccessState(data);
               const persistedState = await saveQuotaSnapshot(config, file, state);
               return {
-                name: file.name,
+                cacheKey: getQuotaCacheKey(file),
                 status: 'success',
                 state: attachRefreshMetadata(persistedState),
               };
             } catch (err: unknown) {
               const message = err instanceof Error ? err.message : t('common.unknown_error');
               const errorStatus = getStatusFromError(err);
-              return { name: file.name, status: 'error', error: message, errorStatus };
+              return {
+                cacheKey: getQuotaCacheKey(file),
+                status: 'error',
+                error: message,
+                errorStatus,
+              };
             }
           })
         );
@@ -147,9 +153,9 @@ export function useQuotaLoader<TState, TData>(config: QuotaConfig<TState, TData>
             const nextState = { ...prev };
             results.forEach((result) => {
               if (result.status === 'success') {
-                nextState[result.name] = result.state as TState;
+                nextState[result.cacheKey] = result.state as TState;
               } else {
-                nextState[result.name] = config.buildErrorState(
+                nextState[result.cacheKey] = config.buildErrorState(
                   result.error || t('common.unknown_error'),
                   result.errorStatus
                 );

@@ -311,17 +311,14 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 8px;
+  border-radius: $radius-md;
   background-color: color-mix(in srgb, var(--primary-color) 76%, #7d654e);
   color: white;
   flex-shrink: 0;
 
-  &.github {
-    background-color: #24292f;
-  }
-
+  &.github,
   &.docs {
-    background-color: #10b981;
+    background-color: #24292f;
   }
 }
 

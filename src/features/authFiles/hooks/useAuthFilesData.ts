@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type RefObj
 import { useTranslation } from 'react-i18next';
 import { authFilesApi } from '@/services/api';
 import type { AuthFileFieldsPatch } from '@/services/api';
-import { apiClient } from '@/services/api/client';
 import { notifyAuthFilesChanged } from '@/features/authFiles/authFilesEvents';
 import { useNotificationStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
@@ -22,6 +21,7 @@ import type {
   AuthFilesArchiveFilter,
   AuthFilesStatusCodeFilter,
 } from '@/features/authFiles/uiState';
+import { getAuthFileAuthIndex, getAuthFileIdentityKey } from '@/features/authFiles/identity';
 
 type DeleteAllOptions = {
   filter: string;
@@ -41,6 +41,17 @@ type DeleteAllOptions = {
 export type BatchPatchFieldsResult = {
   success: number;
   failedNames: string[];
+};
+
+type AuthFileSelectionTarget = AuthFileItem | string;
+
+const isDeleteFailureForFile = (
+  file: AuthFileItem,
+  failure: { name: string; authIndex?: string }
+): boolean => {
+  if (failure.name !== file.name) return false;
+  const authIndex = getAuthFileAuthIndex(file);
+  return !failure.authIndex || failure.authIndex === authIndex;
 };
 
 const BATCH_FIELD_UPDATE_CONCURRENCY = 8;
@@ -65,28 +76,30 @@ export type UseAuthFilesDataResult = {
   loadFiles: (options?: { background?: boolean }) => Promise<void>;
   handleUploadClick: () => void;
   handleFileChange: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  handleDelete: (name: string) => void;
+  handleDelete: (file: AuthFileSelectionTarget) => void;
   handleDeleteAll: (options: DeleteAllOptions) => void;
-  handleDownload: (name: string) => Promise<void>;
+  handleDownload: (file: AuthFileSelectionTarget) => Promise<void>;
   handleManualRefresh: (item: AuthFileItem) => Promise<void>;
   handleStatusToggle: (item: AuthFileItem, enabled: boolean) => Promise<void>;
   handleArchiveToggle: (item: AuthFileItem, archived: boolean) => Promise<void>;
-  toggleSelect: (name: string) => void;
+  toggleSelect: (file: AuthFileSelectionTarget) => void;
   selectAllVisible: (visibleFiles: AuthFileItem[]) => void;
   deselectVisible: (visibleFiles: AuthFileItem[]) => void;
   invertVisibleSelection: (visibleFiles: AuthFileItem[]) => void;
   deselectAll: () => void;
-  batchDownload: (names: string[]) => Promise<void>;
-  batchSetStatus: (names: string[], enabled: boolean) => Promise<void>;
-  batchSetArchived: (names: string[], archived: boolean) => Promise<void>;
+  batchDownload: (files: AuthFileSelectionTarget[]) => Promise<void>;
+  batchSetStatus: (files: AuthFileSelectionTarget[], enabled: boolean) => Promise<void>;
+  batchSetArchived: (files: AuthFileSelectionTarget[], archived: boolean) => Promise<void>;
   batchPatchFields: (
-    names: string[],
+    files: AuthFileSelectionTarget[],
     fields: AuthFileFieldsPatch
   ) => Promise<BatchPatchFieldsResult | null>;
-  batchDelete: (names: string[]) => void;
+  batchDelete: (files: AuthFileSelectionTarget[]) => void;
 };
 
-export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]) => void }): UseAuthFilesDataResult {
+export function useAuthFilesData(_options?: {
+  onFilesMutated?: (identityKeys?: string[]) => void;
+}): UseAuthFilesDataResult {
   const { t } = useTranslation();
   const { showNotification, showConfirmation } = useNotificationStore();
 
@@ -111,13 +124,43 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   const batchArchivePendingRef = useRef(false);
   const batchFieldsPendingRef = useRef(false);
   const selectionCount = selectedFiles.size;
-  const toggleSelect = useCallback((name: string) => {
+  const resolveFile = useCallback(
+    (target: AuthFileSelectionTarget): AuthFileItem | null => {
+      if (typeof target !== 'string') return target;
+      const exact = files.find((file) => getAuthFileIdentityKey(file) === target);
+      if (exact) return exact;
+      // Legacy callers pass a filename; only a credential without auth_index can be
+      // resolved from that value because an indexed duplicate would be ambiguous.
+      return files.find((file) => !getAuthFileAuthIndex(file) && file.name === target) ?? null;
+    },
+    [files]
+  );
+
+  const resolveFiles = useCallback(
+    (targets: AuthFileSelectionTarget[]): AuthFileItem[] => {
+      const seen = new Set<string>();
+      const resolved: AuthFileItem[] = [];
+      targets.forEach((target) => {
+        const file = resolveFile(target);
+        if (!file) return;
+        const identityKey = getAuthFileIdentityKey(file);
+        if (seen.has(identityKey)) return;
+        seen.add(identityKey);
+        resolved.push(file);
+      });
+      return resolved;
+    },
+    [resolveFile]
+  );
+
+  const toggleSelect = useCallback((target: AuthFileSelectionTarget) => {
+    const identityKey = typeof target === 'string' ? target : getAuthFileIdentityKey(target);
     setSelectedFiles((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
+      if (next.has(identityKey)) {
+        next.delete(identityKey);
       } else {
-        next.add(name);
+        next.add(identityKey);
       }
       return next;
     });
@@ -126,48 +169,50 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   const selectAllVisible = useCallback((visibleFiles: AuthFileItem[]) => {
     const nextSelected = visibleFiles
       .filter((file) => !isRuntimeOnlyAuthFile(file))
-      .map((file) => file.name);
+      .map((file) => getAuthFileIdentityKey(file));
     if (nextSelected.length === 0) return;
     setSelectedFiles((prev) => {
       const next = new Set(prev);
-      nextSelected.forEach((name) => next.add(name));
+      nextSelected.forEach((identityKey) => next.add(identityKey));
       return next;
     });
   }, []);
 
   const deselectVisible = useCallback((visibleFiles: AuthFileItem[]) => {
-    const visibleNames = new Set(
-      visibleFiles.filter((file) => !isRuntimeOnlyAuthFile(file)).map((file) => file.name)
+    const visibleIdentityKeys = new Set(
+      visibleFiles
+        .filter((file) => !isRuntimeOnlyAuthFile(file))
+        .map((file) => getAuthFileIdentityKey(file))
     );
-    if (visibleNames.size === 0) return;
+    if (visibleIdentityKeys.size === 0) return;
 
     setSelectedFiles((prev) => {
       let changed = false;
       const next = new Set<string>();
-      prev.forEach((name) => {
-        if (visibleNames.has(name)) {
+      prev.forEach((identityKey) => {
+        if (visibleIdentityKeys.has(identityKey)) {
           changed = true;
           return;
         }
-        next.add(name);
+        next.add(identityKey);
       });
       return changed ? next : prev;
     });
   }, []);
 
   const invertVisibleSelection = useCallback((visibleFiles: AuthFileItem[]) => {
-    const visibleNames = visibleFiles
+    const visibleIdentityKeys = visibleFiles
       .filter((file) => !isRuntimeOnlyAuthFile(file))
-      .map((file) => file.name);
-    if (visibleNames.length === 0) return;
+      .map((file) => getAuthFileIdentityKey(file));
+    if (visibleIdentityKeys.length === 0) return;
 
     setSelectedFiles((prev) => {
       const next = new Set(prev);
-      visibleNames.forEach((name) => {
-        if (next.has(name)) {
-          next.delete(name);
+      visibleIdentityKeys.forEach((identityKey) => {
+        if (next.has(identityKey)) {
+          next.delete(identityKey);
         } else {
-          next.add(name);
+          next.add(identityKey);
         }
       });
       return next;
@@ -178,36 +223,45 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
     setSelectedFiles(new Set());
   }, []);
 
-  const applyDeletedFiles = useCallback((names: string[]) => {
-    const deletedNames = Array.from(new Set(names.map((name) => name.trim()).filter(Boolean)));
-    if (deletedNames.length === 0) return;
+  const applyDeletedFiles = useCallback(
+    (targets: AuthFileSelectionTarget[]) => {
+      const deletedIdentityKeys = new Set(
+        targets.flatMap((target) => {
+          const file = resolveFile(target);
+          return file ? [getAuthFileIdentityKey(file)] : [];
+        })
+      );
+      if (deletedIdentityKeys.size === 0) return;
 
-    const deletedSet = new Set(deletedNames);
-    setFiles((prev) => prev.filter((file) => !deletedSet.has(file.name)));
-    setSelectedFiles((prev) => {
-      if (prev.size === 0) return prev;
-      let changed = false;
-      const next = new Set<string>();
-      prev.forEach((name) => {
-        if (deletedSet.has(name)) {
-          changed = true;
-        } else {
-          next.add(name);
-        }
+      setFiles((prev) =>
+        prev.filter((file) => !deletedIdentityKeys.has(getAuthFileIdentityKey(file)))
+      );
+      setSelectedFiles((prev) => {
+        if (prev.size === 0) return prev;
+        let changed = false;
+        const next = new Set<string>();
+        prev.forEach((identityKey) => {
+          if (deletedIdentityKeys.has(identityKey)) {
+            changed = true;
+          } else {
+            next.add(identityKey);
+          }
+        });
+        return changed ? next : prev;
       });
-      return changed ? next : prev;
-    });
-  }, []);
+    },
+    [resolveFile]
+  );
 
   useEffect(() => {
     if (selectedFiles.size === 0) return;
-    const existingNames = new Set(files.map((file) => file.name));
+    const existingIdentityKeys = new Set(files.map((file) => getAuthFileIdentityKey(file)));
     setSelectedFiles((prev) => {
       let changed = false;
       const next = new Set<string>();
-      prev.forEach((name) => {
-        if (existingNames.has(name)) {
-          next.add(name);
+      prev.forEach((identityKey) => {
+        if (existingIdentityKeys.has(identityKey)) {
+          next.add(identityKey);
         } else {
           changed = true;
         }
@@ -216,22 +270,25 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
     });
   }, [files, selectedFiles.size]);
 
-  const loadFiles = useCallback(async (options?: { background?: boolean }) => {
-    const background = options?.background === true;
-    if (background) setRefreshing(true);
-    else setLoading(true);
-    setError('');
-    try {
-      const data = await authFilesApi.list();
-      setFiles(data?.files || []);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
-      setError(errorMessage);
-    } finally {
-      if (background) setRefreshing(false);
-      else setLoading(false);
-    }
-  }, [t]);
+  const loadFiles = useCallback(
+    async (options?: { background?: boolean }) => {
+      const background = options?.background === true;
+      if (background) setRefreshing(true);
+      else setLoading(true);
+      setError('');
+      try {
+        const data = await authFilesApi.list();
+        setFiles(data?.files || []);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : t('notification.refresh_failed');
+        setError(errorMessage);
+      } finally {
+        if (background) setRefreshing(false);
+        else setLoading(false);
+      }
+    },
+    [t]
+  );
 
   const handleUploadClick = useCallback(() => {
     fileInputRef.current?.click();
@@ -305,18 +362,22 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   );
 
   const handleDelete = useCallback(
-    (name: string) => {
+    (target: AuthFileSelectionTarget) => {
+      const file = resolveFile(target);
+      const name = file?.name ?? (typeof target === 'string' ? target : target.name);
+      const identityKey = file ? getAuthFileIdentityKey(file) : name;
+      if (!name) return;
       showConfirmation({
         title: t('auth_files.delete_title', { defaultValue: 'Delete File' }),
         message: `${t('auth_files.delete_confirm')} "${name}" ?`,
         variant: 'danger',
         confirmText: t('common.confirm'),
         onConfirm: async () => {
-          setDeleting(name);
+          setDeleting(identityKey);
           try {
-            const result = await authFilesApi.deleteFile(name);
+            const result = await authFilesApi.deleteFile(file ?? target);
             showNotification(t('auth_files.delete_success'), 'success');
-            applyDeletedFiles(result.files.length > 0 ? result.files : [name]);
+            applyDeletedFiles(result.deleted > 0 ? [file ?? target] : result.files);
             if (result.deleted > 0) notifyAuthFilesChanged();
           } catch (err: unknown) {
             const errorMessage = err instanceof Error ? err.message : '';
@@ -327,7 +388,7 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         },
       });
     },
-    [applyDeletedFiles, showConfirmation, showNotification, t]
+    [applyDeletedFiles, resolveFile, showConfirmation, showNotification, t]
   );
 
   const handleDeleteAll = useCallback(
@@ -424,11 +485,14 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
                 return;
               }
 
-              const result = await authFilesApi.deleteFiles(filesToDelete.map((file) => file.name));
+              const result = await authFilesApi.deleteFiles(filesToDelete);
               const success = result.deleted;
               const failed = result.failed.length;
 
-              applyDeletedFiles(result.files);
+              const successfulTargets = filesToDelete.filter(
+                (file) => !result.failed.some((failure) => isDeleteFailureForFile(file, failure))
+              );
+              applyDeletedFiles(result.failed.length === 0 ? filesToDelete : successfulTargets);
               if (result.deleted > 0) notifyAuthFilesChanged();
 
               if (failed === 0 && hasResultFilter) {
@@ -506,13 +570,12 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   );
 
   const handleDownload = useCallback(
-    async (name: string) => {
+    async (target: AuthFileSelectionTarget) => {
+      const file = resolveFile(target);
+      const name = file?.name ?? (typeof target === 'string' ? target : target.name);
+      if (!name) return;
       try {
-        const response = await apiClient.getRaw(
-          `/auth-files/download?name=${encodeURIComponent(name)}`,
-          { responseType: 'blob' }
-        );
-        const blob = new Blob([response.data]);
+        const blob = await authFilesApi.download(file ?? target);
         downloadBlob({ filename: name, blob });
         showNotification(t('auth_files.download_success'), 'success');
       } catch (err: unknown) {
@@ -520,39 +583,40 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         showNotification(`${t('notification.download_failed')}: ${errorMessage}`, 'error');
       }
     },
-    [showNotification, t]
+    [resolveFile, showNotification, t]
   );
 
   const handleManualRefresh = useCallback(
     async (item: AuthFileItem) => {
       const name = item.name.trim();
+      const identityKey = getAuthFileIdentityKey(item);
       const provider = item.type ?? item.provider;
       if (
         !name ||
         item.disabled === true ||
         isRuntimeOnlyAuthFile(item) ||
         !supportsAuthFileManualRefresh(provider) ||
-        manualRefreshPendingRef.current.has(name)
+        manualRefreshPendingRef.current.has(identityKey)
       ) {
         return;
       }
 
-      manualRefreshPendingRef.current.add(name);
-      setManualRefreshing((prev) => ({ ...prev, [name]: true }));
+      manualRefreshPendingRef.current.add(identityKey);
+      setManualRefreshing((prev) => ({ ...prev, [identityKey]: true }));
 
       try {
-        await authFilesApi.requestManualRefresh(name);
+        await authFilesApi.requestManualRefresh(item);
         showNotification(t('auth_files.manual_refresh_requested', { name }), 'info');
         notifyAuthFilesChanged();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : t('notification.update_failed');
         showNotification(t('auth_files.manual_refresh_failed', { name, message }), 'error');
       } finally {
-        manualRefreshPendingRef.current.delete(name);
+        manualRefreshPendingRef.current.delete(identityKey);
         setManualRefreshing((prev) => {
-          if (!prev[name]) return prev;
+          if (!prev[identityKey]) return prev;
           const next = { ...prev };
-          delete next[name];
+          delete next[identityKey];
           return next;
         });
       }
@@ -563,16 +627,25 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   const handleStatusToggle = useCallback(
     async (item: AuthFileItem, enabled: boolean) => {
       const name = item.name;
+      const identityKey = getAuthFileIdentityKey(item);
       const nextDisabled = !enabled;
       const previousDisabled = item.disabled === true;
 
-      setStatusUpdating((prev) => ({ ...prev, [name]: true }));
-      setFiles((prev) => prev.map((f) => (f.name === name ? { ...f, disabled: nextDisabled } : f)));
+      setStatusUpdating((prev) => ({ ...prev, [identityKey]: true }));
+      setFiles((prev) =>
+        prev.map((file) =>
+          getAuthFileIdentityKey(file) === identityKey ? { ...file, disabled: nextDisabled } : file
+        )
+      );
 
       try {
-        const res = await authFilesApi.setStatus(name, nextDisabled);
+        const res = await authFilesApi.setStatus(item, nextDisabled);
         setFiles((prev) =>
-          prev.map((f) => (f.name === name ? { ...f, disabled: res.disabled } : f))
+          prev.map((file) =>
+            getAuthFileIdentityKey(file) === identityKey
+              ? { ...file, disabled: res.disabled }
+              : file
+          )
         );
         showNotification(
           enabled
@@ -583,14 +656,18 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : '';
         setFiles((prev) =>
-          prev.map((f) => (f.name === name ? { ...f, disabled: previousDisabled } : f))
+          prev.map((file) =>
+            getAuthFileIdentityKey(file) === identityKey
+              ? { ...file, disabled: previousDisabled }
+              : file
+          )
         );
         showNotification(`${t('notification.update_failed')}: ${errorMessage}`, 'error');
       } finally {
         setStatusUpdating((prev) => {
-          if (!prev[name]) return prev;
+          if (!prev[identityKey]) return prev;
           const next = { ...prev };
-          delete next[name];
+          delete next[identityKey];
           return next;
         });
       }
@@ -601,16 +678,21 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   const handleArchiveToggle = useCallback(
     async (item: AuthFileItem, archived: boolean) => {
       const name = item.name;
+      const identityKey = getAuthFileIdentityKey(item);
       const previousArchived = isArchivedAuthFile(item);
 
-      setArchiveUpdating((prev) => ({ ...prev, [name]: true }));
-      setFiles((prev) => prev.map((f) => (f.name === name ? { ...f, archived } : f)));
+      setArchiveUpdating((prev) => ({ ...prev, [identityKey]: true }));
+      setFiles((prev) =>
+        prev.map((file) =>
+          getAuthFileIdentityKey(file) === identityKey ? { ...file, archived } : file
+        )
+      );
 
       try {
-        const res = await authFilesApi.setArchived(name, archived);
+        const res = await authFilesApi.setArchived(item, archived);
         setFiles((prev) =>
           prev.map((f) =>
-            f.name === name
+            getAuthFileIdentityKey(f) === identityKey
               ? { ...f, archived: res.archived === undefined ? archived : res.archived }
               : f
           )
@@ -624,14 +706,18 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : '';
         setFiles((prev) =>
-          prev.map((f) => (f.name === name ? { ...f, archived: previousArchived } : f))
+          prev.map((file) =>
+            getAuthFileIdentityKey(file) === identityKey
+              ? { ...file, archived: previousArchived }
+              : file
+          )
         );
         showNotification(`${t('notification.update_failed')}: ${errorMessage}`, 'error');
       } finally {
         setArchiveUpdating((prev) => {
-          if (!prev[name]) return prev;
+          if (!prev[identityKey]) return prev;
           const next = { ...prev };
-          delete next[name];
+          delete next[identityKey];
           return next;
         });
       }
@@ -640,17 +726,16 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
   );
 
   const batchSetStatus = useCallback(
-    async (names: string[], enabled: boolean) => {
+    async (targets: AuthFileSelectionTarget[], enabled: boolean) => {
       if (batchStatusPendingRef.current) return;
 
-      const uniqueNames = Array.from(new Set(names));
-      if (uniqueNames.length === 0) return;
-      if (uniqueNames.some((name) => statusUpdating[name] === true)) return;
+      const targetFiles = resolveFiles(targets);
+      if (targetFiles.length === 0) return;
+      const targetKeys = targetFiles.map((file) => getAuthFileIdentityKey(file));
+      if (targetKeys.some((identityKey) => statusUpdating[identityKey] === true)) return;
 
       const originalDisabled = new Map(
-        files
-          .filter((file) => uniqueNames.includes(file.name))
-          .map((file) => [file.name, file.disabled === true])
+        targetFiles.map((file) => [getAuthFileIdentityKey(file), file.disabled === true])
       );
       const targetNames = new Set(originalDisabled.keys());
       const targetNameList = Array.from(targetNames);
@@ -662,45 +747,46 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
       setBatchStatusUpdating(true);
       setStatusUpdating((prev) => {
         const next = { ...prev };
-        targetNameList.forEach((name) => {
-          next[name] = true;
+        targetNameList.forEach((identityKey) => {
+          next[identityKey] = true;
         });
         return next;
       });
       setFiles((prev) =>
         prev.map((file) =>
-          targetNames.has(file.name) ? { ...file, disabled: nextDisabled } : file
+          targetNames.has(getAuthFileIdentityKey(file)) ? { ...file, disabled: nextDisabled } : file
         )
       );
 
       try {
         const results = await Promise.allSettled(
-          targetNameList.map((name) => authFilesApi.setStatus(name, nextDisabled))
+          targetFiles.map((file) => authFilesApi.setStatus(file, nextDisabled))
         );
 
         let successCount = 0;
         let failCount = 0;
-        const failedNames = new Set<string>();
+        const failedKeys = new Set<string>();
         const confirmedDisabled = new Map<string, boolean>();
 
         results.forEach((result, index) => {
-          const name = targetNameList[index];
+          const identityKey = targetNameList[index];
           if (result.status === 'fulfilled') {
             successCount++;
-            confirmedDisabled.set(name, result.value.disabled);
+            confirmedDisabled.set(identityKey, result.value.disabled);
           } else {
             failCount++;
-            failedNames.add(name);
+            failedKeys.add(identityKey);
           }
         });
 
         setFiles((prev) =>
           prev.map((file) => {
-            if (failedNames.has(file.name)) {
-              return { ...file, disabled: originalDisabled.get(file.name) === true };
+            const identityKey = getAuthFileIdentityKey(file);
+            if (failedKeys.has(identityKey)) {
+              return { ...file, disabled: originalDisabled.get(identityKey) === true };
             }
-            if (confirmedDisabled.has(file.name)) {
-              return { ...file, disabled: confirmedDisabled.get(file.name) };
+            if (confirmedDisabled.has(identityKey)) {
+              return { ...file, disabled: confirmedDisabled.get(identityKey) };
             }
             return file;
           })
@@ -731,21 +817,20 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         });
       }
     },
-    [deselectAll, files, showNotification, statusUpdating, t]
+    [deselectAll, resolveFiles, showNotification, statusUpdating, t]
   );
 
   const batchSetArchived = useCallback(
-    async (names: string[], archived: boolean) => {
+    async (targets: AuthFileSelectionTarget[], archived: boolean) => {
       if (batchArchivePendingRef.current) return;
 
-      const uniqueNames = Array.from(new Set(names));
-      if (uniqueNames.length === 0) return;
-      if (uniqueNames.some((name) => archiveUpdating[name] === true)) return;
+      const targetFiles = resolveFiles(targets);
+      if (targetFiles.length === 0) return;
+      const targetKeys = targetFiles.map((file) => getAuthFileIdentityKey(file));
+      if (targetKeys.some((identityKey) => archiveUpdating[identityKey] === true)) return;
 
       const originalArchived = new Map(
-        files
-          .filter((file) => uniqueNames.includes(file.name))
-          .map((file) => [file.name, isArchivedAuthFile(file)])
+        targetFiles.map((file) => [getAuthFileIdentityKey(file), isArchivedAuthFile(file)])
       );
       const targetNames = new Set(originalArchived.keys());
       const targetNameList = Array.from(targetNames);
@@ -755,46 +840,49 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
       setBatchArchiveUpdating(true);
       setArchiveUpdating((prev) => {
         const next = { ...prev };
-        targetNameList.forEach((name) => {
-          next[name] = true;
+        targetNameList.forEach((identityKey) => {
+          next[identityKey] = true;
         });
         return next;
       });
       setFiles((prev) =>
-        prev.map((file) => (targetNames.has(file.name) ? { ...file, archived } : file))
+        prev.map((file) =>
+          targetNames.has(getAuthFileIdentityKey(file)) ? { ...file, archived } : file
+        )
       );
 
       try {
         const results = await Promise.allSettled(
-          targetNameList.map((name) => authFilesApi.setArchived(name, archived))
+          targetFiles.map((file) => authFilesApi.setArchived(file, archived))
         );
 
         let successCount = 0;
         let failCount = 0;
-        const failedNames = new Set<string>();
+        const failedKeys = new Set<string>();
         const confirmedArchived = new Map<string, boolean>();
 
         results.forEach((result, index) => {
-          const name = targetNameList[index];
+          const identityKey = targetNameList[index];
           if (result.status === 'fulfilled') {
             successCount++;
             confirmedArchived.set(
-              name,
+              identityKey,
               result.value.archived === undefined ? archived : result.value.archived
             );
           } else {
             failCount++;
-            failedNames.add(name);
+            failedKeys.add(identityKey);
           }
         });
 
         setFiles((prev) =>
           prev.map((file) => {
-            if (failedNames.has(file.name)) {
-              return { ...file, archived: originalArchived.get(file.name) === true };
+            const identityKey = getAuthFileIdentityKey(file);
+            if (failedKeys.has(identityKey)) {
+              return { ...file, archived: originalArchived.get(identityKey) === true };
             }
-            if (confirmedArchived.has(file.name)) {
-              return { ...file, archived: confirmedArchived.get(file.name) };
+            if (confirmedArchived.has(identityKey)) {
+              return { ...file, archived: confirmedArchived.get(identityKey) };
             }
             return file;
           })
@@ -827,25 +915,21 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         });
       }
     },
-    [archiveUpdating, deselectAll, files, showNotification, t]
+    [archiveUpdating, deselectAll, resolveFiles, showNotification, t]
   );
 
   const batchDownload = useCallback(
-    async (names: string[]) => {
-      const uniqueNames = Array.from(new Set(names));
-      if (uniqueNames.length === 0) return;
+    async (targets: AuthFileSelectionTarget[]) => {
+      const targetFiles = resolveFiles(targets);
+      if (targetFiles.length === 0) return;
 
       let successCount = 0;
       let failCount = 0;
 
-      for (const name of uniqueNames) {
+      for (const file of targetFiles) {
         try {
-          const response = await apiClient.getRaw(
-            `/auth-files/download?name=${encodeURIComponent(name)}`,
-            { responseType: 'blob' }
-          );
-          const blob = new Blob([response.data]);
-          downloadBlob({ filename: name, blob });
+          const blob = await authFilesApi.download(file);
+          downloadBlob({ filename: file.name, blob });
           successCount++;
         } catch {
           failCount++;
@@ -864,35 +948,32 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         );
       }
     },
-    [showNotification, t]
+    [resolveFiles, showNotification, t]
   );
 
   const batchPatchFields = useCallback(
     async (
-      names: string[],
+      targets: AuthFileSelectionTarget[],
       fields: AuthFileFieldsPatch
     ): Promise<BatchPatchFieldsResult | null> => {
       if (batchFieldsPendingRef.current || Object.keys(fields).length === 0) return null;
 
-      const requestedNames = new Set(names.map((name) => name.trim()).filter(Boolean));
-      const targetNames = files
-        .filter((file) => requestedNames.has(file.name) && !isRuntimeOnlyAuthFile(file))
-        .map((file) => file.name);
-      if (targetNames.length === 0) return null;
+      const targetFiles = resolveFiles(targets).filter((file) => !isRuntimeOnlyAuthFile(file));
+      if (targetFiles.length === 0) return null;
 
       batchFieldsPendingRef.current = true;
       setBatchFieldsUpdating(true);
 
       try {
-        const succeeded = new Array<boolean>(targetNames.length).fill(false);
+        const succeeded = new Array<boolean>(targetFiles.length).fill(false);
         let nextIndex = 0;
-        const workerCount = Math.min(BATCH_FIELD_UPDATE_CONCURRENCY, targetNames.length);
+        const workerCount = Math.min(BATCH_FIELD_UPDATE_CONCURRENCY, targetFiles.length);
         const workers = Array.from({ length: workerCount }, async () => {
-          while (nextIndex < targetNames.length) {
+          while (nextIndex < targetFiles.length) {
             const index = nextIndex;
             nextIndex += 1;
             try {
-              await authFilesApi.patchFields(targetNames[index], fields);
+              await authFilesApi.patchFields(targetFiles[index], fields);
               succeeded[index] = true;
             } catch {
               succeeded[index] = false;
@@ -901,8 +982,10 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         });
         await Promise.all(workers);
 
-        const failedNames = targetNames.filter((_, index) => !succeeded[index]);
-        const success = targetNames.length - failedNames.length;
+        const failedNames = targetFiles
+          .filter((_, index) => !succeeded[index])
+          .map((file) => getAuthFileIdentityKey(file));
+        const success = targetFiles.length - failedNames.length;
 
         if (success > 0) {
           notifyAuthFilesChanged();
@@ -929,23 +1012,26 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         setBatchFieldsUpdating(false);
       }
     },
-    [deselectAll, files, loadFiles, showNotification, t]
+    [deselectAll, loadFiles, resolveFiles, showNotification, t]
   );
 
   const batchDelete = useCallback(
-    (names: string[]) => {
-      const uniqueNames = Array.from(new Set(names));
-      if (uniqueNames.length === 0) return;
+    (targets: AuthFileSelectionTarget[]) => {
+      const targetFiles = resolveFiles(targets);
+      if (targetFiles.length === 0) return;
 
       showConfirmation({
         title: t('auth_files.batch_delete_title'),
-        message: t('auth_files.batch_delete_confirm', { count: uniqueNames.length }),
+        message: t('auth_files.batch_delete_confirm', { count: targetFiles.length }),
         variant: 'danger',
         confirmText: t('common.confirm'),
         onConfirm: async () => {
           try {
-            const result = await authFilesApi.deleteFiles(uniqueNames);
-            applyDeletedFiles(result.files);
+            const result = await authFilesApi.deleteFiles(targetFiles);
+            const successfulTargets = targetFiles.filter(
+              (file) => !result.failed.some((failure) => isDeleteFailureForFile(file, failure))
+            );
+            applyDeletedFiles(result.failed.length === 0 ? targetFiles : successfulTargets);
             if (result.deleted > 0) notifyAuthFilesChanged();
 
             if (result.failed.length === 0) {
@@ -970,7 +1056,7 @@ export function useAuthFilesData(_options?: { onFilesMutated?: (names?: string[]
         },
       });
     },
-    [applyDeletedFiles, showConfirmation, showNotification, t]
+    [applyDeletedFiles, resolveFiles, showConfirmation, showNotification, t]
   );
 
   return {

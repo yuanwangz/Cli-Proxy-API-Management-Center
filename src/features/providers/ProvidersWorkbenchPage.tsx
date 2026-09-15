@@ -160,12 +160,8 @@ export function ProvidersWorkbenchPage({ fixedBrand }: ProvidersWorkbenchPagePro
         : allGroups.filter(
             (group) =>
               group.id !== 'apikeyFun' &&
-              group.id !== 'code0' &&
-              group.id !== 'claudeApi' &&
               group.id !== 'fennoAI' &&
-              group.id !== 'qiniuCloud' &&
-              group.id !== 'lmuAI' &&
-              group.id !== 'infistar'
+              group.id !== 'qiniuCloud'
           ),
     [allGroups, fixedBrand]
   );

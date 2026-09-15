@@ -226,9 +226,9 @@ const normalizeProviderKeyConfig = (item: unknown): ProviderKeyConfig | null => 
       config.cloak = cloak;
     }
   }
-  const experimentalCchSigning = normalizeBoolean(record?.['experimental-cch-signing']);
-  if (experimentalCchSigning !== undefined) {
-    config.experimentalCchSigning = experimentalCchSigning;
+  const fingerprintProfile = record?.['fingerprint-profile'];
+  if (typeof fingerprintProfile === 'string' && fingerprintProfile.trim()) {
+    config.fingerprintProfile = fingerprintProfile.trim();
   }
 
   return config;

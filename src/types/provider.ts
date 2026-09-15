@@ -61,7 +61,7 @@ export interface ProviderKeyConfig {
   disableCooling?: boolean;
   failureWarmup?: FailureWarmupConfig;
   cloak?: CloakConfig;
-  experimentalCchSigning?: boolean;
+  fingerprintProfile?: string;
   authIndex?: string;
 }
 

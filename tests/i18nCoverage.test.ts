@@ -100,15 +100,11 @@ const PROVIDER_NAMES = [
   'codex',
   'xai',
   'claude',
-  'claudeApi',
   'vertex',
   'openaiCompatibility',
   'apikeyFun',
-  'code0',
   'fennoAI',
   'qiniuCloud',
-  'lmuAI',
-  'infistar',
   'kimi',
 ] as const;
 

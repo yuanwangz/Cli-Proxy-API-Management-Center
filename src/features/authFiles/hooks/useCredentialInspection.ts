@@ -5,7 +5,6 @@ import {
   ANTIGRAVITY_CONFIG,
   CLAUDE_CONFIG,
   CODEX_CONFIG,
-  GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
 } from '@/components/quota';
@@ -28,6 +27,7 @@ import {
   type CredentialInspectionSummary,
   type InspectionOutcome,
 } from '@/features/authFiles/credentialInspection';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 
 export type {
   CredentialInspectionAction,
@@ -55,7 +55,6 @@ const QUOTA_CONFIGS = [
   ANTIGRAVITY_CONFIG,
   CLAUDE_CONFIG,
   CODEX_CONFIG,
-  GEMINI_CLI_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
 ] as readonly unknown[] as readonly InspectableQuotaConfig[];
@@ -84,14 +83,14 @@ export const summarizeCredentialInspection = (
     return summary;
   }, emptySummary());
 
-const uniqueFilesByName = (files: AuthFileItem[]): AuthFileItem[] => {
+const uniqueFilesByIdentity = (files: AuthFileItem[]): AuthFileItem[] => {
   const seen = new Set<string>();
   const unique: AuthFileItem[] = [];
 
   files.forEach((file) => {
-    const name = String(file.name ?? '').trim();
-    if (!name || seen.has(name)) return;
-    seen.add(name);
+    const identityKey = getAuthFileIdentityKey(file);
+    if (!file.name.trim() || seen.has(identityKey)) return;
+    seen.add(identityKey);
     unique.push(file);
   });
 
@@ -137,18 +136,18 @@ const inspectViaQuota = async (
 
 export function useCredentialInspection() {
   const { t } = useTranslation();
-  const [resultsByName, setResultsByName] = useState<Record<string, CredentialInspectionResult>>(
-    {}
-  );
+  const [resultsByIdentity, setResultsByIdentity] = useState<
+    Record<string, CredentialInspectionResult>
+  >({});
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const runIdRef = useRef(0);
 
-  const activeResults = useMemo(() => Object.values(resultsByName), [resultsByName]);
+  const activeResults = useMemo(() => Object.values(resultsByIdentity), [resultsByIdentity]);
   const summary = useMemo(() => summarizeCredentialInspection(activeResults), [activeResults]);
 
   const clearResults = useCallback(() => {
-    setResultsByName({});
+    setResultsByIdentity({});
     setProgress({ completed: 0, total: 0 });
   }, []);
 
@@ -159,7 +158,7 @@ export function useCredentialInspection() {
     ): Promise<CredentialInspectionSummary> => {
       if (running) return summary;
 
-      const uniqueFiles = uniqueFilesByName(files);
+      const uniqueFiles = uniqueFilesByIdentity(files);
       const runId = runIdRef.current + 1;
       runIdRef.current = runId;
 
@@ -180,7 +179,8 @@ export function useCredentialInspection() {
 
       const pushResult = (result: CredentialInspectionResult) => {
         collected.push(result);
-        setResultsByName((prev) => ({ ...prev, [result.name]: result }));
+        const identityKey = result.identityKey ?? result.name;
+        setResultsByIdentity((prev) => ({ ...prev, [identityKey]: result }));
       };
 
       const completeOne = () => {
@@ -193,9 +193,11 @@ export function useCredentialInspection() {
 
       uniqueFiles.forEach((file) => {
         const name = String(file.name ?? '').trim();
+        const identityKey = getAuthFileIdentityKey(file);
         const provider = resolveAuthProvider(file);
         const base = {
           name,
+          identityKey,
           provider,
           checkedAt: nowIso,
           checkedAtMs: nowMs,
@@ -242,7 +244,7 @@ export function useCredentialInspection() {
           return;
         }
 
-        pending[name] = {
+        pending[identityKey] = {
           ...base,
           status: 'checking',
           message: t('auth_files.inspection_checking'),
@@ -251,7 +253,7 @@ export function useCredentialInspection() {
       });
 
       if (Object.keys(pending).length > 0) {
-        setResultsByName((prev) => ({ ...prev, ...pending }));
+        setResultsByIdentity((prev) => ({ ...prev, ...pending }));
       }
 
       let cursor = 0;
@@ -268,12 +270,14 @@ export function useCredentialInspection() {
             const checkedAtMs = checkedAt.getTime();
             const provider = target.config.type;
             const name = target.file.name;
+            const identityKey = getAuthFileIdentityKey(target.file);
 
             try {
               const outcome = await inspectViaQuota(target, t);
 
               pushResult({
                 name,
+                identityKey,
                 provider,
                 status: outcome.status,
                 message: outcome.message,
@@ -301,6 +305,7 @@ export function useCredentialInspection() {
 
               pushResult({
                 name,
+                identityKey,
                 provider,
                 status: outcome.status,
                 message: outcome.message,
@@ -335,7 +340,9 @@ export function useCredentialInspection() {
   );
 
   return {
-    resultsByName,
+    // Keep the old property name as a read-compatible alias; both maps are keyed by identity key.
+    resultsByIdentity,
+    resultsByName: resultsByIdentity,
     summary,
     running,
     progress,

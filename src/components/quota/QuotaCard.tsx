@@ -347,15 +347,6 @@ const resolveCredentialPlanLabel = (
     return { label: translated === key ? planType : translated, premium: planType !== 'plan_free' };
   }
 
-  if (normalizedType === 'gemini-cli') {
-    const tierLabel =
-      readRecordString(quotaRecord, 'tierLabel') ?? readRecordString(quotaRecord, 'tier_label');
-    if (!tierLabel) return null;
-    const tierId =
-      readRecordString(quotaRecord, 'tierId') ?? readRecordString(quotaRecord, 'tier_id');
-    return { label: tierLabel, premium: tierId === 'g1-ultra-tier' };
-  }
-
   return null;
 };
 

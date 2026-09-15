@@ -3,14 +3,6 @@ import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { configFieldDomId } from '../../searchIndex';
 import styles from './Field.module.scss';
 
-/** 搜索跳转的脉冲高亮 class（useFieldJump 命令式挂载/移除）。 */
-export const FIELD_HIGHLIGHT_CLASS: string = styles.fieldHighlightActive;
-
-/**
- * 表单控件宿主 class：收编旧 VisualConfigEditor 的 :global(.form-group/.input/...)
- * 覆盖的作用域根。SectionCard 的内容区自动挂载；脱离卡片渲染表单块（如 Modal 内容）时手动挂。
- */
-export const FIELDS_ROOT_CLASS: string = styles.fieldsRoot;
 
 export type ToggleRowProps = {
   title: string;
@@ -46,9 +38,21 @@ export function Divider() {
 
 // Stable, stateless anchor around a searchable field. Search jumps target its DOM id
 // (see searchIndex.ts) and the highlight pulse is applied to it imperatively.
-export function FieldAnchor({ fieldId, children }: { fieldId: string; children: ReactNode }) {
+// `wide` 让字段在 FieldGrid 里跨两列（如长文本的代理 URL）。
+export function FieldAnchor({
+  fieldId,
+  wide = false,
+  children,
+}: {
+  fieldId: string;
+  wide?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div id={configFieldDomId(fieldId)} className={styles.fieldAnchor}>
+    <div
+      id={configFieldDomId(fieldId)}
+      className={`${styles.fieldAnchor} ${wide ? styles.fieldAnchorWide : ''}`}
+    >
       {children}
     </div>
   );

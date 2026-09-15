@@ -7,6 +7,7 @@ import type {
   CredentialInspectionResult,
   CredentialInspectionStatus,
 } from '@/features/authFiles/credentialInspection';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 import type { AuthFileItem } from '@/types';
 
 const files: AuthFileItem[] = [
@@ -111,5 +112,22 @@ describe('auth-files inspection result filter', () => {
         (file) => file.name
       )
     ).toEqual(['unchecked.json']);
+  });
+
+  test('matches inspection results by name plus auth index', () => {
+    const first = { name: 'shared.json', type: 'codex', authIndex: 'auth-a' };
+    const second = { name: 'shared.json', type: 'codex', authIndex: 'auth-b' };
+    const sameNameFiles = [first, second];
+    const sameNameResults = {
+      [getAuthFileIdentityKey(first)]: inspectionResult('healthy'),
+      [getAuthFileIdentityKey(second)]: inspectionResult('reauth'),
+    };
+
+    expect(filterAuthFilesByInspectionStatus(sameNameFiles, 'healthy', sameNameResults)).toEqual([
+      first,
+    ]);
+    expect(filterAuthFilesByInspectionStatus(sameNameFiles, 'reauth', sameNameResults)).toEqual([
+      second,
+    ]);
   });
 });

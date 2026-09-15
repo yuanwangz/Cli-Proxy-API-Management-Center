@@ -7,10 +7,11 @@ import {
   type ExcludedModelsCatalogState,
 } from '@/components/excludedModels';
 import { authFilesApi } from '@/services/api';
+import type { AuthFileLookup } from '@/services/api';
 import type { AuthFileModelItem } from '@/features/authFiles/constants';
 
 interface AuthFileExcludedModelsFieldProps {
-  fileName: string;
+  fileLookup: AuthFileLookup;
   /** 换行分隔的规则文本——凭证编辑器的 dirty diff 依赖这个形状，不要改成数组。 */
   value: string;
   disabled: boolean;
@@ -18,12 +19,13 @@ interface AuthFileExcludedModelsFieldProps {
 }
 
 export function AuthFileExcludedModelsField({
-  fileName,
+  fileLookup,
   value,
   disabled,
   onChange,
 }: AuthFileExcludedModelsFieldProps) {
   const { t } = useTranslation();
+  const { name: fileName, authIndex } = fileLookup;
   // 凭证文件名可能含点/斜杠等字符，不适合直接当 HTML id。
   const labelId = `${useId()}-excluded-models-label`;
   const latestValueRef = useRef(value);
@@ -42,7 +44,7 @@ export function AuthFileExcludedModelsField({
     setLoadFailed(false);
 
     void authFilesApi
-      .getModelsForAuthFile(fileName)
+      .getModelsForAuthFile({ name: fileName, authIndex })
       .then((items) => {
         if (cancelled) return;
         const byId = new Map<string, AuthFileModelItem>();
@@ -72,7 +74,7 @@ export function AuthFileExcludedModelsField({
     return () => {
       cancelled = true;
     };
-  }, [fileName]);
+  }, [authIndex, fileName]);
 
   const rules = useMemo(() => parseExcludedRulesText(value), [value]);
   const candidates = useMemo(

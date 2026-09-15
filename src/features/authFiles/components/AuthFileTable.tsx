@@ -16,6 +16,7 @@ import {
 import { ProviderStatusBar } from '@/components/providers/ProviderStatusBar';
 import type { CredentialInspectionResult } from '@/features/authFiles/hooks/useCredentialInspection';
 import type { AuthFileStatusBarData } from '@/features/authFiles/hooks/useAuthFilesStatusBarCache';
+import { deriveAuthFileIdentity, getAuthFileIdentityKey } from '@/features/authFiles/identity';
 import type { AuthFileItem } from '@/types';
 import { formatFileSize } from '@/utils/format';
 import {
@@ -58,13 +59,13 @@ export type AuthFileTableProps = {
   inspectionRunning: boolean;
   inspectionActionRunning: Record<string, boolean>;
   onShowModels: (file: AuthFileItem) => void;
-  onDownload: (name: string) => void;
+  onDownload: (file: AuthFileItem) => void;
   onManualRefresh: (file: AuthFileItem) => void;
   onOpenPrefixProxyEditor: (file: AuthFileItem) => void;
-  onDelete: (name: string) => void;
+  onDelete: (file: AuthFileItem) => void;
   onToggleStatus: (file: AuthFileItem, enabled: boolean) => void;
   onToggleArchive: (file: AuthFileItem, archived: boolean) => void;
-  onToggleSelect: (name: string) => void;
+  onToggleSelect: (file: AuthFileItem) => void;
   onSelectPage: (files: AuthFileItem[]) => void;
   onDeselectPage: (files: AuthFileItem[]) => void;
   onInspectOne: (file: AuthFileItem) => void;
@@ -130,7 +131,8 @@ export function AuthFileTable({
     [files]
   );
   const allVisibleSelected =
-    selectableFiles.length > 0 && selectableFiles.every((file) => selectedFiles.has(file.name));
+    selectableFiles.length > 0 &&
+    selectableFiles.every((file) => selectedFiles.has(getAuthFileIdentityKey(file)));
 
   return (
     <div className={`${styles.authTableShell} ${compact ? styles.authTableShellCompact : ''}`}>
@@ -156,7 +158,7 @@ export function AuthFileTable({
         {files.map((file) => {
           const isRuntimeOnly = isRuntimeOnlyAuthFile(file);
           const isArchived = isArchivedAuthFile(file);
-          const selected = selectedFiles.has(file.name);
+          const selected = selectedFiles.has(getAuthFileIdentityKey(file));
           const providerKey = normalizeProviderKey(String(file.type ?? file.provider ?? 'unknown'));
           const typeColor = getTypeColor(providerKey, resolvedTheme);
           const typeLabel = getTypeLabel(t, providerKey);
@@ -176,12 +178,8 @@ export function AuthFileTable({
           const statusCode = getAuthFileStatusCode(file);
           const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
           const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
-          const accountValue =
-            typeof file.account === 'string'
-              ? file.account.trim()
-              : typeof file.email === 'string'
-                ? file.email.trim()
-                : '';
+          const identity = deriveAuthFileIdentity(file);
+          const identityKey = getAuthFileIdentityKey(file);
           const stateLabel = isRuntimeOnly
             ? t('auth_files.type_virtual')
             : isArchived
@@ -202,7 +200,7 @@ export function AuthFileTable({
                 : hasStatusWarning
                   ? styles.stateBadgeWarning
                   : styles.stateBadgeActive;
-          const inspection = inspectionResults[file.name];
+          const inspection = inspectionResults[identityKey];
           const inspectionTitle = inspection
             ? [inspection.message, inspection.actionReason, ...inspection.evidence]
                 .filter(Boolean)
@@ -215,18 +213,18 @@ export function AuthFileTable({
           const showModelsButton = !isRuntimeOnly || providerKey === 'aistudio';
           const showManualRefreshButton =
             !isRuntimeOnly && supportsAuthFileManualRefresh(providerKey);
-          const isManualRefreshing = manualRefreshing[file.name] === true;
+          const isManualRefreshing = manualRefreshing[identityKey] === true;
 
           return (
             <div
-              key={file.name}
+              key={identityKey}
               className={`${styles.authTableRow} ${selected ? styles.authTableRowSelected : ''} ${file.disabled ? styles.authTableRowDisabled : ''} ${isArchived ? styles.authTableRowArchived : ''}`}
             >
               <div className={styles.authTableSelectCell}>
                 {!isRuntimeOnly && (
                   <SelectionCheckbox
                     checked={selected}
-                    onChange={() => onToggleSelect(file.name)}
+                    onChange={() => onToggleSelect(file)}
                     ariaLabel={
                       selected ? t('auth_files.batch_deselect') : t('auth_files.batch_select_all')
                     }
@@ -270,12 +268,15 @@ export function AuthFileTable({
                       </span>
                     )}
                   </div>
-                  <span className={styles.authCredentialName} title={file.name}>
-                    {file.name}
+                  <span className={styles.authCredentialName} title={identity.fullName}>
+                    {identity.primary}
                   </span>
-                  {(accountValue || noteValue) && (
-                    <span className={styles.authCredentialSub} title={noteValue || accountValue}>
-                      {noteValue || accountValue}
+                  {(identity.secondary || noteValue) && (
+                    <span
+                      className={styles.authCredentialSub}
+                      title={noteValue || identity.secondary || undefined}
+                    >
+                      {noteValue || identity.secondary}
                     </span>
                   )}
                 </div>
@@ -334,9 +335,9 @@ export function AuthFileTable({
                     disabled={
                       disableControls ||
                       inspectionRunning ||
-                      inspectionActionRunning[file.name] === true
+                      inspectionActionRunning[identityKey] === true
                     }
-                    loading={inspectionActionRunning[file.name] === true}
+                    loading={inspectionActionRunning[identityKey] === true}
                     title={inspection.actionReason}
                   >
                     {t(`auth_files.inspection_action_${inspection.action}`)}
@@ -398,7 +399,7 @@ export function AuthFileTable({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => onDownload(file.name)}
+                      onClick={() => onDownload(file)}
                       className={styles.iconButton}
                       title={t('auth_files.download_button')}
                       disabled={disableControls}
@@ -425,9 +426,9 @@ export function AuthFileTable({
                           ? t('auth_files.unarchive_button')
                           : t('auth_files.archive_button')
                       }
-                      disabled={disableControls || archiveUpdating[file.name] === true}
+                      disabled={disableControls || archiveUpdating[identityKey] === true}
                     >
-                      {archiveUpdating[file.name] === true ? (
+                      {archiveUpdating[identityKey] === true ? (
                         <LoadingSpinner size={14} />
                       ) : (
                         <IconInbox size={15} />
@@ -440,19 +441,19 @@ export function AuthFileTable({
                       disabled={
                         disableControls ||
                         isArchived ||
-                        statusUpdating[file.name] === true ||
-                        archiveUpdating[file.name] === true
+                        statusUpdating[identityKey] === true ||
+                        archiveUpdating[identityKey] === true
                       }
                     />
                     <Button
                       variant="danger"
                       size="sm"
-                      onClick={() => onDelete(file.name)}
+                      onClick={() => onDelete(file)}
                       className={styles.iconButton}
                       title={t('auth_files.delete_button')}
-                      disabled={disableControls || deleting === file.name}
+                      disabled={disableControls || deleting === identityKey}
                     >
-                      {deleting === file.name ? (
+                      {deleting === identityKey ? (
                         <LoadingSpinner size={14} />
                       ) : (
                         <IconTrash2 size={15} />

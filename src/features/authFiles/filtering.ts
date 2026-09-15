@@ -5,6 +5,7 @@ import {
   isArchivedAuthFile,
   normalizeProviderKey,
 } from '@/features/authFiles/constants';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 import type {
   AuthFilesArchiveFilter,
   AuthFilesInspectionStatusFilter,
@@ -14,13 +15,15 @@ import type {
 export const filterAuthFilesByInspectionStatus = (
   files: AuthFileItem[],
   statusFilter: AuthFilesInspectionStatusFilter,
-  resultsByName: Readonly<Record<string, CredentialInspectionResult>>
+  resultsByIdentity: Readonly<Record<string, CredentialInspectionResult>>
 ): AuthFileItem[] => {
   if (statusFilter === 'all') return files;
   if (statusFilter === 'not_checked') {
-    return files.filter((file) => !resultsByName[file.name]);
+    return files.filter((file) => !resultsByIdentity[getAuthFileIdentityKey(file)]);
   }
-  return files.filter((file) => resultsByName[file.name]?.status === statusFilter);
+  return files.filter(
+    (file) => resultsByIdentity[getAuthFileIdentityKey(file)]?.status === statusFilter
+  );
 };
 
 export type AuthFilesFilterPipelineOptions = {

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { copyToClipboard } from '@/utils/clipboard';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
 import {
   QUOTA_PROVIDER_TYPES,
   clampCardPageSize,
@@ -16,6 +17,7 @@ import {
   isProblemAuthFile,
   isRuntimeOnlyAuthFile,
   normalizeProviderKey,
+  type AuthFileQuotaFilter,
   type QuotaProviderType,
   type ResolvedTheme,
 } from '@/features/authFiles/constants';
@@ -109,7 +111,7 @@ export function AuthFilesPage() {
   } = useAuthFilesModels();
 
   const invalidateDerivedCaches = useCallback(
-    (names?: string[]) => invalidateAuthFileDerivedCaches(invalidateModels, names),
+    (identityKeys?: string[]) => invalidateAuthFileDerivedCaches(invalidateModels, identityKeys),
     [invalidateModels]
   );
 
@@ -183,6 +185,8 @@ export function AuthFilesPage() {
   )
     ? (normalizedFilter as QuotaProviderType)
     : null;
+  const activeQuotaFilter: AuthFileQuotaFilter =
+    normalizedFilter === 'all' ? 'all' : quotaFilterType;
   const pageSize = compactMode ? pageSizeByMode.compact : pageSizeByMode.regular;
   const problemOnly = statusFilterMode === 'problem';
   const disabledOnly = statusFilterMode === 'disabled';
@@ -452,14 +456,14 @@ export function AuthFilesPage() {
     () => sorted.filter((file) => !isRuntimeOnlyAuthFile(file)),
     [sorted]
   );
-  const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
+  const selectedIdentityKeys = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
   const selectedHasStatusUpdating = useMemo(
-    () => selectedNames.some((name) => statusUpdating[name] === true),
-    [selectedNames, statusUpdating]
+    () => selectedIdentityKeys.some((identityKey) => statusUpdating[identityKey] === true),
+    [selectedIdentityKeys, statusUpdating]
   );
   const batchStatusButtonsDisabled =
     disableControls ||
-    selectedNames.length === 0 ||
+    selectedIdentityKeys.length === 0 ||
     batchStatusUpdating ||
     selectedHasStatusUpdating;
 
@@ -562,7 +566,7 @@ export function AuthFilesPage() {
   const gridClasses = [
     styles.grid,
     compactMode ? styles.gridCompact : '',
-    quotaFilterType ? styles.gridQuota : '',
+    activeQuotaFilter ? styles.gridQuota : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -682,16 +686,16 @@ export function AuthFilesPage() {
           <div className={gridClasses}>
             {pageItems.map((file, index) => (
               <AuthFileCard
-                key={file.name}
+                key={getAuthFileIdentityKey(file)}
                 file={file}
                 compact={compactMode}
-                selected={selectedFiles.has(file.name)}
+                selected={selectedFiles.has(getAuthFileIdentityKey(file))}
                 resolvedTheme={resolvedTheme}
                 disableControls={disableControls}
                 deleting={deleting}
                 statusUpdating={statusUpdating}
                 manualRefreshing={manualRefreshing}
-                quotaFilterType={quotaFilterType}
+                quotaFilterType={activeQuotaFilter}
                 statusBarCache={statusBarCache}
                 entranceDelayMs={cardEntranceDelay(index)}
                 onShowModels={showModels}
@@ -798,10 +802,10 @@ export function AuthFilesPage() {
         onSelectFiltered={() => selectAllVisible(sorted)}
         onInvertPage={() => invertVisibleSelection(pageItems)}
         onDeselectAll={deselectAll}
-        onDownload={() => void batchDownload(selectedNames)}
-        onEnable={() => batchSetStatus(selectedNames, true)}
-        onDisable={() => batchSetStatus(selectedNames, false)}
-        onDelete={() => batchDelete(selectedNames)}
+        onDownload={() => void batchDownload(selectedIdentityKeys)}
+        onEnable={() => batchSetStatus(selectedIdentityKeys, true)}
+        onDisable={() => batchSetStatus(selectedIdentityKeys, false)}
+        onDelete={() => batchDelete(selectedIdentityKeys)}
       />
     </div>
   );

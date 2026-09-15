@@ -16,6 +16,7 @@
  */
 
 import type { AuthFileItem } from '@/types';
+import { normalizeRecentRequestAuthIndex } from '@/utils/recentRequests';
 
 export type AuthFileIdentityKind = 'email' | 'projectId' | 'fileName';
 
@@ -33,6 +34,15 @@ export type AuthFileIdentity = {
 /** AuthFileItem 有索引签名，后端给非字符串也能通过类型检查——这里挡住。 */
 const readIdentityText = (value: unknown): string =>
   typeof value === 'string' ? value.trim() : '';
+
+export const getAuthFileAuthIndex = (file: AuthFileItem): string | undefined =>
+  normalizeRecentRequestAuthIndex(file.authIndex ?? file['auth_index']) ?? undefined;
+
+export const getAuthFileIdentityKey = (file: AuthFileItem): string => {
+  const name = readIdentityText(file.name);
+  const authIndex = getAuthFileAuthIndex(file);
+  return authIndex ? `${name}\0${authIndex}` : name;
+};
 
 /** 去掉 .json 后缀（大小写不敏感），仅在剥完仍有内容时生效。 */
 export const stripJsonExtension = (name: string): string => {

@@ -12,9 +12,9 @@ export type BuiltInOAuthProvider =
   | 'codex'
   | 'anthropic'
   | 'antigravity'
-  | 'gemini-cli'
   | 'kimi'
-  | 'xai';
+  | 'xai'
+  | 'devin';
 
 export interface OAuthStartResponse {
   url: string;
@@ -25,12 +25,18 @@ export interface OAuthCallbackResponse {
   status: 'ok';
 }
 
-const WEBUI_SUPPORTED = new Set<string>(['codex', 'anthropic', 'antigravity', 'gemini-cli', 'xai']);
+export interface OAuthCancelResponse {
+  status: 'ok';
+  cancelled: boolean;
+}
 
-// Management oauth-callback expects provider "gemini" for Gemini CLI sessions.
-const CALLBACK_PROVIDER_MAP: Record<string, string> = {
-  'gemini-cli': 'gemini',
-};
+const WEBUI_SUPPORTED = new Set<string>([
+  'codex',
+  'anthropic',
+  'antigravity',
+  'xai',
+  'devin',
+]);
 
 const normalizeProviderForManagementPath = (provider: string): string => {
   const key = normalizeManagementOAuthProviderKey(provider);
@@ -41,31 +47,36 @@ const normalizeProviderForManagementPath = (provider: string): string => {
 };
 
 export const oauthApi = {
-  startAuth: (provider: string, options?: { projectId?: string }) => {
+  startAuth: (provider: string, signal?: AbortSignal) => {
     const providerKey = normalizeProviderForManagementPath(provider);
     const params: Record<string, string | boolean> = {};
     if (WEBUI_SUPPORTED.has(providerKey)) {
       params.is_webui = true;
     }
-    if (providerKey === 'gemini-cli' && options?.projectId) {
-      params.project_id = options.projectId;
-    }
     return apiClient.get<OAuthStartResponse>(`/${providerKey}-auth-url`, {
       params: Object.keys(params).length ? params : undefined,
+      ...(signal ? { signal } : {}),
     });
   },
 
-  getAuthStatus: (state: string) =>
+  getAuthStatus: (state: string, signal?: AbortSignal) =>
     apiClient.get<{ status: 'ok' | 'wait' | 'error'; error?: string }>(`/get-auth-status`, {
       params: { state },
+      ...(signal ? { signal } : {}),
     }),
 
-  submitCallback: (provider: string, redirectUrl: string) => {
+  cancelSession: (state: string, signal?: AbortSignal) =>
+    apiClient.delete<OAuthCancelResponse>('/oauth-session', {
+      params: { state },
+      ...(signal ? { signal } : {}),
+    }),
+
+  submitCallback: (provider: string, redirectUrl: string, signal?: AbortSignal) => {
     const providerKey = normalizeProviderForManagementPath(provider);
-    const callbackProvider = CALLBACK_PROVIDER_MAP[providerKey] ?? providerKey;
-    return apiClient.post<OAuthCallbackResponse>('/oauth-callback', {
-      provider: callbackProvider,
-      redirect_url: redirectUrl,
-    });
+    return apiClient.post<OAuthCallbackResponse>(
+      '/oauth-callback',
+      { provider: providerKey, redirect_url: redirectUrl },
+      signal ? { signal } : undefined
+    );
   },
 };

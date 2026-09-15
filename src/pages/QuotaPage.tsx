@@ -12,7 +12,7 @@ import {
   ANTIGRAVITY_CONFIG,
   CLAUDE_CONFIG,
   CODEX_CONFIG,
-  GEMINI_CLI_CONFIG,
+  DEVIN_CONFIG,
   KIMI_CONFIG,
   XAI_CONFIG,
 } from '@/components/quota';
@@ -168,7 +168,7 @@ export function QuotaPage() {
         onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
-        config={XAI_CONFIG}
+        config={DEVIN_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}
@@ -178,7 +178,7 @@ export function QuotaPage() {
         onRegisterAutoRefresh={registerAutoRefresh}
       />
       <QuotaSection
-        config={GEMINI_CLI_CONFIG}
+        config={XAI_CONFIG}
         files={files}
         loading={loading}
         disabled={disableControls}

@@ -3,15 +3,18 @@
  */
 
 import { apiClient } from './client';
-import type { AuthFilesResponse } from '@/types/authFile';
+import type { AuthFileItem, AuthFilesResponse } from '@/types/authFile';
 import type { OAuthModelAliasEntry } from '@/types';
 import { normalizeOAuthProviderKey } from '@/utils/providerKeys';
+import { getAuthFileIdentityKey } from '@/features/authFiles/identity';
+import { getQuotaCacheKey } from '@/utils/quota/identity';
 import {
   normalizeRecentRequestAuthIndex,
   normalizeRecentRequestBuckets,
   normalizeUsageTotal,
 } from '@/utils/recentRequests';
 import { parseTimestampMs } from '@/utils/timestamp';
+import { normalizeAuthFileCooldowns, normalizeCooldownTimestamp } from './authFileCooldowns';
 
 type StatusError = { status?: number };
 type AuthFileStatusResponse = { status: string; disabled: boolean; archived?: boolean };
@@ -20,6 +23,12 @@ type AuthFileRefreshResponse = {
   disabled?: boolean;
   file?: AuthFileEntry;
 };
+export type AuthFileLookup = {
+  name: string;
+  authIndex?: string | number | null;
+  auth_index?: string | number | null;
+};
+export type AuthFileTarget = AuthFileItem | AuthFileLookup | string;
 type AuthFileEntry = AuthFilesResponse['files'][number];
 export type AuthFileFieldsPatch = {
   prefix?: string;
@@ -36,7 +45,7 @@ export type AuthFileFieldsPatch = {
   'excluded-models'?: string[];
   expired?: string;
 };
-type AuthFileBatchFailure = { name: string; error: string };
+type AuthFileBatchFailure = { name: string; authIndex?: string; error: string };
 type AuthFileBatchUploadResponse = {
   status?: string;
   uploaded?: number;
@@ -62,6 +71,52 @@ type AuthFileBatchDeleteResult = {
   failed: AuthFileBatchFailure[];
 };
 
+const normalizeAuthFileLookup = (
+  target: AuthFileTarget,
+  authIndex?: string | number | null
+): AuthFileLookup => {
+  if (typeof target === 'string') {
+    return {
+      name: target.trim(),
+      authIndex: normalizeRecentRequestAuthIndex(authIndex) ?? undefined,
+    };
+  }
+
+  return {
+    name: String(target.name ?? '').trim(),
+    authIndex:
+      normalizeRecentRequestAuthIndex(target.authIndex ?? target.auth_index ?? authIndex) ??
+      undefined,
+  };
+};
+
+const authFileLookupParams = (lookup: AuthFileLookup): Record<string, string> => ({
+  name: lookup.name,
+  ...(lookup.authIndex ? { auth_index: String(lookup.authIndex) } : {}),
+});
+
+const authFileLookupPayload = (lookup: AuthFileLookup): Record<string, string> =>
+  authFileLookupParams(lookup);
+
+const normalizeAuthFileTargets = (targets: AuthFileTarget[]): AuthFileLookup[] => {
+  const seen = new Set<string>();
+  const normalized: AuthFileLookup[] = [];
+
+  targets.forEach((target) => {
+    const lookup = normalizeAuthFileLookup(target);
+    if (!lookup.name) return;
+    const identityKey = getAuthFileIdentityKey({
+      name: lookup.name,
+      authIndex: lookup.authIndex,
+    });
+    if (seen.has(identityKey)) return;
+    seen.add(identityKey);
+    normalized.push(lookup);
+  });
+
+  return normalized;
+};
+
 const getStatusCode = (err: unknown): number | undefined => {
   if (!err || typeof err !== 'object') return undefined;
   if ('status' in err) return (err as StatusError).status;
@@ -84,7 +139,9 @@ const normalizeRequestedAuthFileNames = (names: string[]): string[] => {
 
 const normalizeBatchFileNames = (value: unknown): string[] => {
   if (!Array.isArray(value)) return [];
-  return normalizeRequestedAuthFileNames(value.map((item) => String(item ?? '')));
+  return value
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
 };
 
 const normalizeBatchFailures = (value: unknown): AuthFileBatchFailure[] => {
@@ -94,6 +151,7 @@ const normalizeBatchFailures = (value: unknown): AuthFileBatchFailure[] => {
     if (!item || typeof item !== 'object') return result;
     const entry = item as Record<string, unknown>;
     const name = String(entry.name ?? '').trim();
+    const authIndex = normalizeRecentRequestAuthIndex(entry.auth_index ?? entry.authIndex);
     const error =
       typeof entry.error === 'string'
         ? entry.error.trim()
@@ -102,7 +160,11 @@ const normalizeBatchFailures = (value: unknown): AuthFileBatchFailure[] => {
           : '';
 
     if (!name && !error) return result;
-    result.push({ name, error: error || 'Unknown error' });
+    result.push({
+      name,
+      ...(authIndex ? { authIndex } : {}),
+      error: error || 'Unknown error',
+    });
     return result;
   }, []);
 };
@@ -119,6 +181,21 @@ const deriveSuccessfulFileNames = (
 
   return requestedNames.filter((name) => !failedNames.has(name));
 };
+
+const deriveSuccessfulTargetNames = (
+  requestedTargets: AuthFileLookup[],
+  failed: AuthFileBatchFailure[]
+): string[] =>
+  requestedTargets
+    .filter(
+      (target) =>
+        !failed.some(
+          (failure) =>
+            failure.name === target.name &&
+            (!failure.authIndex || failure.authIndex === target.authIndex)
+        )
+    )
+    .map((target) => target.name);
 
 const normalizeBatchUploadResponse = (
   payload: AuthFileBatchUploadResponse | undefined,
@@ -158,26 +235,28 @@ const normalizeBatchUploadResponse = (
 
 const normalizeBatchDeleteResponse = (
   payload: AuthFileBatchDeleteResponse | undefined,
-  requestedNames: string[]
+  requestedTargets: AuthFileLookup[]
 ): AuthFileBatchDeleteResult => {
   const failed = normalizeBatchFailures(payload?.failed);
   const filesFromPayload = normalizeBatchFileNames(payload?.files);
   // Backend single-name delete returns only {status:"ok"} (auth_files.go:794).
   const inferFromRequest = payload?.deleted === undefined && failed.length === 0;
-  const derivedFiles = deriveSuccessfulFileNames(requestedNames, failed);
+  // Keep duplicate names when distinct auth_index targets were requested. The backend
+  // identifies those targets separately even though its response currently exposes names.
+  const derivedFiles = deriveSuccessfulTargetNames(requestedTargets, failed);
   const deleted =
     typeof payload?.deleted === 'number'
       ? payload.deleted
       : filesFromPayload.length > 0
         ? filesFromPayload.length
         : inferFromRequest
-          ? requestedNames.length
+          ? requestedTargets.length
           : 0;
   const files =
     filesFromPayload.length > 0
       ? filesFromPayload
       : inferFromRequest
-        ? [...requestedNames]
+        ? [...derivedFiles]
         : deleted > 0 && derivedFiles.length === deleted
           ? derivedFiles
           : [];
@@ -264,6 +343,8 @@ const mergeAuthFileEntries = (entries: AuthFileEntry[]): AuthFileEntry => {
 
   rest.forEach((entry) => {
     Object.entries(entry).forEach(([key, value]) => {
+      // Cooldown snapshots are atomic: [] and null are meaningful, not missing fields.
+      if (key === 'cooldowns' && Object.prototype.hasOwnProperty.call(merged, key)) return;
       if (!hasMeaningfulValue(merged[key]) && hasMeaningfulValue(value)) {
         merged[key] = value;
       }
@@ -296,7 +377,11 @@ const readRuntimeOnlyField = (entry: AuthFileEntry): boolean => {
  * camelCase 字段上。原始字段全部透传——quota resolvers 仍直接读
  * plan_type / id_token / metadata / attributes 等生字段。
  */
-const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
+const normalizeAuthFileEntry = (
+  entry: AuthFileEntry,
+  observedAt: string | undefined,
+  receivedAtMs: number
+): AuthFileEntry => {
   const declaredStatusMessage =
     typeof entry.statusMessage === 'string' ? entry.statusMessage.trim() : '';
   const statusMessage = readTextField(entry, 'status_message') || declaredStatusMessage;
@@ -311,6 +396,7 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
 
   return {
     ...entry,
+    cooldownSnapshot: normalizeAuthFileCooldowns(entry.cooldowns, observedAt, receivedAtMs),
     runtimeOnly: readRuntimeOnlyField(entry),
     authIndex: normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex),
     recentRequests: normalizeRecentRequestBuckets(entry.recent_requests ?? entry.recentRequests),
@@ -326,13 +412,20 @@ const normalizeAuthFileEntry = (entry: AuthFileEntry): AuthFileEntry => {
   };
 };
 
-export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFilesResponse => {
+export const normalizeAuthFilesResponse = (
+  payload: AuthFilesResponse,
+  receivedAtMs = Date.now()
+): AuthFilesResponse => {
+  const observedAt = normalizeCooldownTimestamp(payload?.observed_at);
   const files = Array.isArray(payload?.files) ? payload.files : [];
   const grouped = new Map<string, AuthFileEntry[]>();
 
   files.forEach((entry) => {
     const name = readTextField(entry, 'name');
-    const key = name || JSON.stringify(entry);
+    const authIndex = normalizeRecentRequestAuthIndex(entry['auth_index'] ?? entry.authIndex);
+    const key = name
+      ? getQuotaCacheKey({ ...entry, name, authIndex })
+      : JSON.stringify(entry);
     const bucket = grouped.get(key);
     if (bucket) {
       bucket.push(entry);
@@ -342,16 +435,23 @@ export const normalizeAuthFilesResponse = (payload: AuthFilesResponse): AuthFile
   });
 
   const normalizedFiles = Array.from(grouped.values()).map((entries) =>
-    normalizeAuthFileEntry(mergeAuthFileEntries(entries))
+    normalizeAuthFileEntry(mergeAuthFileEntries(entries), observedAt, receivedAtMs)
   );
-  normalizedFiles.sort((left, right) =>
-    readTextField(left, 'name').localeCompare(readTextField(right, 'name'), undefined, {
+  normalizedFiles.sort((left, right) => {
+    const nameOrder = readTextField(left, 'name').localeCompare(
+      readTextField(right, 'name'),
+      undefined,
+      { sensitivity: 'accent' }
+    );
+    if (nameOrder !== 0) return nameOrder;
+    return String(left.authIndex ?? '').localeCompare(String(right.authIndex ?? ''), undefined, {
       sensitivity: 'accent',
-    })
-  );
+    });
+  });
 
   return {
     ...payload,
+    observedAt,
     files: normalizedFiles,
     total: normalizedFiles.length,
   };
@@ -460,40 +560,56 @@ export const serializeOauthModelAliases = (
   });
 
 const OAUTH_MODEL_ALIAS_ENDPOINT = '/oauth-model-alias';
-const MANUAL_REFRESH_EXPIRY_OFFSET_MS = 60_000;
-
-export const buildManualRefreshExpiredAt = (nowMs = Date.now()): string =>
-  new Date(nowMs - MANUAL_REFRESH_EXPIRY_OFFSET_MS).toISOString();
 
 export const authFilesApi = {
-  list: async () =>
-    normalizeAuthFilesResponse(await apiClient.get<AuthFilesResponse>('/auth-files')),
+  list: async (lookup?: AuthFileLookup) =>
+    normalizeAuthFilesResponse(
+      await apiClient.get<AuthFilesResponse>(
+        '/auth-files',
+        lookup ? { params: authFileLookupParams(normalizeAuthFileLookup(lookup)) } : undefined
+      )
+    ),
 
-  setStatus: (name: string, disabled: boolean, authIndex?: string) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
-      name,
+  setStatus: (target: AuthFileTarget, disabled: boolean, authIndex?: string | number | null) => {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    return apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
+      ...authFileLookupPayload(lookup),
       disabled,
-      auth_index: authIndex,
-    }),
+    });
+  },
 
-  setArchived: (name: string, archived: boolean, authIndex?: string) =>
-    apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
-      name,
+  setArchived: (target: AuthFileTarget, archived: boolean, authIndex?: string | number | null) => {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    return apiClient.patch<AuthFileStatusResponse>('/auth-files/status', {
+      ...authFileLookupPayload(lookup),
       archived,
-      auth_index: authIndex,
-    }),
+    });
+  },
 
-  refreshCredential: (name: string) =>
-    apiClient.post<AuthFileRefreshResponse>('/auth-files/refresh', { name }),
+  refreshCredential: (target: AuthFileTarget, authIndex?: string | number | null) => {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    return apiClient.post<AuthFileRefreshResponse>('/auth-files/refresh', {
+      ...authFileLookupPayload(lookup),
+    });
+  },
 
-  patchFields: (name: string, fields: AuthFileFieldsPatch) =>
-    apiClient.patch('/auth-files/fields', { name, ...fields }),
+  patchFields: (
+    target: AuthFileTarget,
+    fields: AuthFileFieldsPatch,
+    authIndex?: string | number | null
+  ) => {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    return apiClient.patch('/auth-files/fields', { ...authFileLookupPayload(lookup), ...fields });
+  },
 
-  requestManualRefresh: (name: string) =>
-    apiClient.patch('/auth-files/fields', {
-      name,
-      expired: buildManualRefreshExpiredAt(),
-    }),
+  requestManualRefresh: async (
+    target: AuthFileTarget,
+    authIndex?: string | number | null
+  ): Promise<void> => {
+    // v7.3.0 returns the complete Auth (including tokens). Never return it to callers.
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    await apiClient.post<unknown>('/auth-files/refresh', { ...authFileLookupPayload(lookup) });
+  },
 
   uploadFiles: async (files: File[]): Promise<AuthFileBatchUploadResult> => {
     const requestedNames = files.map((file) => file.name);
@@ -509,34 +625,43 @@ export const authFilesApi = {
     return normalizeBatchUploadResponse(payload, requestedNames);
   },
 
-  deleteFiles: async (names: string[]): Promise<AuthFileBatchDeleteResult> => {
-    const requestedNames = normalizeRequestedAuthFileNames(names);
-    if (requestedNames.length === 0) {
+  deleteFiles: async (targets: AuthFileTarget[]): Promise<AuthFileBatchDeleteResult> => {
+    const requestedTargets = normalizeAuthFileTargets(targets);
+    const requestedNames = normalizeRequestedAuthFileNames(
+      requestedTargets.filter((target) => !target.authIndex).map((target) => target.name)
+    );
+    if (requestedTargets.length === 0) {
       return { status: 'ok', deleted: 0, files: [], failed: [] };
     }
 
     const payload = await apiClient.delete<AuthFileBatchDeleteResponse>('/auth-files', {
-      data: { names: requestedNames },
+      data: {
+        names: requestedNames,
+        targets: requestedTargets.map((target) => authFileLookupPayload(target)),
+      },
     });
-    return normalizeBatchDeleteResponse(payload, requestedNames);
+    return normalizeBatchDeleteResponse(payload, requestedTargets);
   },
 
-  deleteFile: (name: string) => authFilesApi.deleteFiles([name]),
+  deleteFile: (target: AuthFileTarget, authIndex?: string | number | null) =>
+    authFilesApi.deleteFiles([normalizeAuthFileLookup(target, authIndex)]),
 
   deleteAll: () => apiClient.delete('/auth-files', { params: { all: true } }),
 
-  download: async (name: string): Promise<Blob> => {
-    const response = await apiClient.getRaw(
-      `/auth-files/download?name=${encodeURIComponent(name)}`,
-      {
-        responseType: 'blob',
-      }
-    );
+  download: async (target: AuthFileTarget, authIndex?: string | number | null): Promise<Blob> => {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    const query = new URLSearchParams(authFileLookupParams(lookup));
+    const response = await apiClient.getRaw(`/auth-files/download?${query.toString()}`, {
+      responseType: 'blob',
+    });
     return response.data as Blob;
   },
 
-  downloadText: async (name: string): Promise<string> => {
-    const blob = await authFilesApi.download(name);
+  downloadText: async (
+    target: AuthFileTarget,
+    authIndex?: string | number | null
+  ): Promise<string> => {
+    const blob = await authFilesApi.download(target, authIndex);
     return blob.text();
   },
 
@@ -595,10 +720,13 @@ export const authFilesApi = {
 
   // 获取认证凭证支持的模型
   async getModelsForAuthFile(
-    name: string
+    target: AuthFileTarget,
+    authIndex?: string | number | null
   ): Promise<{ id: string; display_name?: string; type?: string; owned_by?: string }[]> {
+    const lookup = normalizeAuthFileLookup(target, authIndex);
+    const query = new URLSearchParams(authFileLookupParams(lookup));
     const data = await apiClient.get<Record<string, unknown>>(
-      `/auth-files/models?name=${encodeURIComponent(name)}`
+      `/auth-files/models?${query.toString()}`
     );
     const models = data.models ?? data['models'];
     return Array.isArray(models)

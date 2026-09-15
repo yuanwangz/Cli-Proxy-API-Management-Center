@@ -1,12 +1,15 @@
 import { useQuotaStore } from '@/stores/useQuotaStore';
+import { getQuotaCacheFileName } from '@/utils/quota/identity';
 
-type ModelsInvalidator = (names?: string[]) => void;
+type ModelsInvalidator = (identityKeys?: string[]) => void;
 
 /** Invalidate every cache whose contents depend on an auth file's credentials. */
 export const invalidateAuthFileDerivedCaches = (
   invalidateModels: ModelsInvalidator,
-  names?: string[]
+  identityKeys?: string[]
 ): void => {
-  invalidateModels(names);
-  useQuotaStore.getState().clearQuotaCache();
+  invalidateModels(identityKeys);
+  useQuotaStore
+    .getState()
+    .clearQuotaCache(identityKeys?.map((identityKey) => getQuotaCacheFileName(identityKey)));
 };

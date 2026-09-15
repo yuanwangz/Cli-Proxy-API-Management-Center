@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { deriveAuthFileIdentity, stripJsonExtension } from '../src/features/authFiles/identity';
+import {
+  deriveAuthFileIdentity,
+  getAuthFileAuthIndex,
+  getAuthFileIdentityKey,
+  stripJsonExtension,
+} from '../src/features/authFiles/identity';
 import type { AuthFileItem } from '../src/types';
 
 const authFile = (overrides: Partial<AuthFileItem> = {}): AuthFileItem => ({
@@ -182,5 +187,27 @@ describe('deriveAuthFileIdentity', () => {
       secondary: null,
       fullName: '',
     });
+  });
+});
+
+describe('getAuthFileIdentityKey', () => {
+  test('keeps same-name credentials distinct by snake-case auth index', () => {
+    const first = authFile({ name: 'shared.json', type: 'devin', auth_index: 'idx-a' });
+    const second = authFile({ name: 'shared.json', type: 'devin', auth_index: 'idx-b' });
+
+    expect(getAuthFileAuthIndex(first)).toBe('idx-a');
+    expect(getAuthFileIdentityKey(first)).toBe('shared.json\0idx-a');
+    expect(getAuthFileIdentityKey(second)).toBe('shared.json\0idx-b');
+  });
+
+  test('accepts normalized camel-case numeric auth indexes', () => {
+    const file = authFile({ name: 'shared.json', authIndex: 42 });
+
+    expect(getAuthFileAuthIndex(file)).toBe('42');
+    expect(getAuthFileIdentityKey(file)).toBe('shared.json\0' + '42');
+  });
+
+  test('falls back to the filename when auth index is absent', () => {
+    expect(getAuthFileIdentityKey(authFile({ name: 'legacy.json' }))).toBe('legacy.json');
   });
 });
