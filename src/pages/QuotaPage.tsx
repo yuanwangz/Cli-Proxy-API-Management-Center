@@ -39,7 +39,9 @@ export function QuotaPage() {
   const loadFilesRef = useRef(createSingleFlight<void>());
   const loadQuotaSnapshotsRef = useRef(createSingleFlight<void>());
 
-  tRef.current = t;
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const disableControls = connectionStatus !== 'connected';
 

@@ -2,7 +2,7 @@
  * Generic quota section component.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -324,12 +324,6 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
     setLoading,
   } = useQuotaPagination(displayFiles);
 
-  const automaticRefreshRef = useRef<(targets: AuthFileItem[]) => Promise<void>>(async () => {});
-  automaticRefreshRef.current = async (targets) => {
-    const refreshableTargets = targets.filter((file) => config.filterFn(file));
-    if (refreshableTargets.length === 0) return;
-    await loadQuota(refreshableTargets, 'page', setLoading);
-  };
 
   const refreshQuotaTargets = useCallback(
     async (targets: AuthFileItem[], scope: QuotaScope) => {
@@ -340,8 +334,12 @@ export function QuotaSection<TState extends QuotaStatusState, TData>({
   );
 
   const refreshQuotaTargetsAutomatically = useCallback(
-    (targets: AuthFileItem[]) => automaticRefreshRef.current(targets),
-    []
+    async (targets: AuthFileItem[]) => {
+      const refreshableTargets = targets.filter((file) => config.filterFn(file));
+      if (refreshableTargets.length === 0) return;
+      await loadQuota(refreshableTargets, 'page', setLoading);
+    },
+    [config, loadQuota, setLoading]
   );
 
   useEffect(() => {

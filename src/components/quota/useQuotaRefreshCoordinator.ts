@@ -122,8 +122,11 @@ export function useQuotaRefreshCoordinator({
   const [registrationVersion, setRegistrationVersion] = useState(0);
   const [scheduleVersion, setScheduleVersion] = useState(0);
 
-  filesRef.current = files;
-  snapshotsRef.current = snapshots;
+
+  useEffect(() => {
+    filesRef.current = files;
+    snapshotsRef.current = snapshots;
+  }, [files, snapshots]);
 
   const register = useCallback<RegisterQuotaRefreshHandler>((provider, handler) => {
     const normalizedProvider = normalizeQuotaProvider(provider);

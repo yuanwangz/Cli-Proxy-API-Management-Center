@@ -5,8 +5,9 @@ import type { VisualConfigValues } from '../../src/types/visualConfig';
 
 /** Exercise the real reducer/codec without a browser or management connection. */
 export function runVisualConfig(yaml?: string, patches: Partial<VisualConfigValues>[] = []) {
-  const resultRef: { current: ReturnType<typeof useVisualConfig> | undefined } = {
-    current: undefined,
+  let result: ReturnType<typeof useVisualConfig> | undefined;
+  const captureResult = (value: ReturnType<typeof useVisualConfig>) => {
+    result = value;
   };
 
   function Harness() {
@@ -23,13 +24,12 @@ export function runVisualConfig(yaml?: string, patches: Partial<VisualConfigValu
       visualConfig.setVisualValues(patches[phase - 1]);
       setPhase(phase + 1);
     } else {
-      // eslint-disable-next-line react-hooks/immutability -- XX: SSR harness captures final hook state after rendering.
-      resultRef.current = visualConfig;
+      captureResult(visualConfig);
     }
     return null;
   }
 
   renderToStaticMarkup(createElement(Harness));
-  if (!resultRef.current) throw new Error('Visual config harness did not finish');
-  return resultRef.current;
+  if (!result) throw new Error('Visual config harness did not finish');
+  return result;
 }
