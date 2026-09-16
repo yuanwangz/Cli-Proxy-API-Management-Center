@@ -776,6 +776,7 @@
     "observed_additional_secondary_window": "{{name}}: лимит {{duration}}"
   },
   "devin_quota": {
+    "title": "Квота Devin",
     "daily": "Остаток на день",
     "weekly": "Остаток на неделю",
     "plan_label": "Тариф",

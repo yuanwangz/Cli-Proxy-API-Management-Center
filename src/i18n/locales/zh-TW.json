@@ -763,6 +763,7 @@
     "observed_additional_secondary_window": "{{name}} {{duration}} 限額"
   },
   "devin_quota": {
+    "title": "Devin 配額",
     "daily": "每日剩餘額度",
     "weekly": "每週剩餘額度",
     "plan_label": "方案",

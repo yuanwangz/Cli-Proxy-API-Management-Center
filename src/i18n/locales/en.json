@@ -765,6 +765,7 @@
     "observed_additional_secondary_window": "{{name}} {{duration}} limit"
   },
   "devin_quota": {
+    "title": "Devin Quota",
     "daily": "Daily remaining",
     "weekly": "Weekly remaining",
     "plan_label": "Plan",

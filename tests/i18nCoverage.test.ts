@@ -191,6 +191,17 @@ const RECENTLY_USED_KEYS = [
   'quota_management.windows_today',
 ] as const;
 
+const QUOTA_PROVIDER_PREFIXES = [
+  'antigravity_quota',
+  'claude_quota',
+  'codex_quota',
+  'devin_quota',
+  'kimi_quota',
+  'xai_quota',
+] as const;
+
+const QUOTA_PROVIDER_SURFACE_KEYS = ['title', 'empty_title', 'empty_desc'] as const;
+
 const readKey = (value: unknown, key: string): unknown =>
   key.split('.').reduce<unknown>((current, part) => {
     if (!current || typeof current !== 'object') return undefined;
@@ -238,6 +249,18 @@ describe('i18n coverage for upstream feature surfaces', () => {
       const messages = await Bun.file(`src/i18n/locales/${locale}.json`).json();
       for (const key of RECENTLY_USED_KEYS) {
         expect(typeof readKey(messages, key), `${locale}: ${key}`).toBe('string');
+      }
+    }
+  });
+
+  test('quota provider titles and empty states exist in every supported locale', async () => {
+    for (const locale of LOCALES) {
+      const messages = await Bun.file(`src/i18n/locales/${locale}.json`).json();
+      for (const prefix of QUOTA_PROVIDER_PREFIXES) {
+        for (const key of QUOTA_PROVIDER_SURFACE_KEYS) {
+          const fullKey = `${prefix}.${key}`;
+          expect(typeof readKey(messages, fullKey), `${locale}: ${fullKey}`).toBe('string');
+        }
       }
     }
   });
